@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="A private academic workspace connecting courses, sources, notes, and citations."
+    />
+    <meta name="theme-color" content="#151d19" />
+    <title>Blake's Academic OS</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Primary navigation">
+        <div class="brand-row">
+          <div class="brand-mark" aria-hidden="true">B</div>
+          <div>
+            <p class="brand-name">Academic OS</p>
+            <p class="brand-meta">Blake's workspace</p>
+          </div>
+          <button class="icon-button mobile-close" id="closeSidebar" aria-label="Close navigation">×</button>
+        </div>
+
+        <button class="search-trigger" id="openSearch" type="button">
+          <span class="search-icon" aria-hidden="true"></span>
+          <span>Search everything</span>
+          <kbd>⌘ K</kbd>
+        </button>
+
+        <nav class="nav-list" aria-label="Workspace">
+          <button class="nav-item active" data-view="home" type="button">
+            <span class="nav-symbol">⌂</span>
+            Home
+          </button>
+          <button class="nav-item" data-view="academic" data-configurable-tab="academic" type="button">
+            <span class="nav-symbol">◫</span>
+            Academic
+          </button>
+          <button class="nav-item" data-view="networking" data-configurable-tab="networking" type="button">
+            <span class="nav-symbol">⌬</span>
+            Networking
+          </button>
+          <button class="nav-item" data-view="calendar" data-configurable-tab="calendar" type="button">
+            <span class="nav-symbol">▦</span>
+            Calendar
+          </button>
+          <button class="nav-item" data-view="health" data-configurable-tab="health" type="button">
+            <span class="nav-symbol">◇</span>
+            Health &amp; performance
+          </button>
+          <button class="nav-item" data-view="capital" data-configurable-tab="capital" type="button">
+            <span class="nav-symbol">◔</span>
+            Capital
+          </button>
+          <button class="nav-item" data-view="settings" type="button">
+            <span class="nav-symbol">⚙</span>
+            Settings
+          </button>
+        </nav>
+
+        <div class="course-nav">
+          <div class="section-label-row">
+            <span>Courses</span>
+            <button class="quiet-icon" id="addCourse" type="button" aria-label="Add course">+</button>
+          </div>
+          <div id="courseList" class="course-list"></div>
+        </div>
+
+        <div class="sidebar-footer">
+          <div class="sync-line">
+            <span class="sync-dot"></span>
+            <span>Saved in this browser</span>
+          </div>
+          <button class="profile-button" type="button" id="profileButton">
+            <span class="avatar">BC</span>
+            <span>
+              <strong>Blake Cascadden</strong>
+              <small>Private workspace</small>
+            </span>
+            <span class="more-dots">•••</span>
+          </button>
+        </div>
+      </aside>
+
+      <div class="sidebar-scrim" id="sidebarScrim"></div>
+
+      <main class="main-area">
+        <header class="topbar">
+          <div class="topbar-left">
+            <button class="icon-button menu-button" id="openSidebar" aria-label="Open navigation">☰</button>
+            <div class="breadcrumb">
+              <span id="breadcrumbRoot">Second Brain</span>
+              <span class="breadcrumb-separator">/</span>
+              <strong id="breadcrumbCourse">Home</strong>
+            </div>
+          </div>
+          <div class="topbar-actions">
+            <button class="button secondary" id="openConnections" type="button">
+              <span class="button-dot"></span>
+              Connections
+            </button>
+            <button class="button primary" id="openCapture" type="button">
+              <span aria-hidden="true">+</span>
+              Quick capture
+            </button>
+          </div>
+        </header>
+
+        <div id="homeView" class="view active-view">
+          <section class="home-welcome" aria-labelledby="homeTitle">
+            <div>
+              <p class="eyebrow" id="homeDate">YOUR COMMAND CENTER</p>
+              <h1 id="homeTitle">Good morning, Blake.</h1>
+              <p>One clear view of academics, performance, relationships, and progress.</p>
+            </div>
+            <div class="home-clock" role="timer" aria-label="Current local time" aria-live="off">
+              <div class="home-clock-label">
+                <span class="home-clock-pulse" aria-hidden="true"></span>
+                Local time
+              </div>
+              <div class="home-clock-face">
+                <time id="homeClockTime" datetime="">00:00</time>
+                <span class="home-clock-detail">
+                  <span id="homeClockSeconds">00</span>
+                  <span id="homeClockPeriod">AM</span>
+                </span>
+              </div>
+            </div>
+          </section>
+
+          <section class="home-command-grid" aria-label="Today overview">
+            <article class="home-card home-focus-card">
+              <div class="home-card-heading">
+                <div>
+                  <p class="kicker">TODAY</p>
+                  <h2>Priority stack</h2>
+                </div>
+                <span class="home-status live" id="homeFocusStatus"><i></i>Focused</span>
+              </div>
+              <div class="priority-list" id="homePriorityList"></div>
+            </article>
+
+            <article class="home-card home-academic-card">
+              <div class="home-card-heading">
+                <div>
+                  <p class="kicker">ACADEMIC</p>
+                  <h2>Knowledge pulse</h2>
+                </div>
+                <button class="text-button" data-home-target="academic" type="button">Open</button>
+              </div>
+              <div class="knowledge-score">
+                <div class="score-ring" id="homeScoreRing"><span id="homeLinkRate">0%</span></div>
+                <div><strong>Sources linked to thinking</strong><p id="homeAcademicSummary">Loading your workspace summary.</p></div>
+              </div>
+              <div class="mini-stat-row" id="homeAcademicStats"></div>
+            </article>
+
+            <article class="home-card home-day-card">
+              <div class="home-card-heading">
+                <div>
+                  <p class="kicker">DAY PLAN</p>
+                  <h2>Schedule signal</h2>
+                </div>
+                <span class="home-status" id="homeDayStatus">Schedule aligned</span>
+              </div>
+              <div class="day-plan-empty">
+                <div class="day-plan-icon" id="homeDayCount">00</div>
+                <div><strong id="homeDayTitle">Your day is open to shape.</strong><p id="homeDaySummary">Schedule and recovery signals will appear here.</p></div>
+              </div>
+              <div class="time-zone-row"><span>Morning</span><span>Core hours</span><span>Recovery</span></div>
+            </article>
+          </section>
+
+          <section class="home-modules" aria-labelledby="systemOverviewTitle">
+            <div class="home-section-heading">
+              <div><p class="kicker">ALL SYSTEMS</p><h2 id="systemOverviewTitle">Your OS at a glance</h2></div>
+              <button class="text-button" id="homeConnections" type="button">Customize</button>
+            </div>
+            <div class="home-module-grid">
+              <button class="module-summary ready" data-home-target="academic" type="button">
+                <span class="module-icon academic">A</span>
+                <span class="module-copy"><strong>Academic</strong><small id="homeAcademicModule">Courses, notes, and sources</small></span>
+                <span class="module-state">Live</span>
+              </button>
+              <button class="module-summary ready" data-home-target="calendar" type="button">
+                <span class="module-icon calendar">C</span>
+                <span class="module-copy"><strong>Calendar</strong><small id="homeCalendarModule">Schedule and time blocks</small></span>
+                <span class="module-state">Live</span>
+              </button>
+              <button class="module-summary ready" data-home-target="networking" type="button">
+                <span class="module-icon network">N</span>
+                <span class="module-copy"><strong>Networking</strong><small id="homeNetworkingModule">Contacts and follow ups</small></span>
+                <span class="module-state">Live</span>
+              </button>
+              <button class="module-summary ready" data-home-target="health" type="button">
+                <span class="module-icon health">H</span>
+                <span class="module-copy"><strong>Health</strong><small id="homeHealthModule">Recovery and performance</small></span>
+                <span class="module-state">Live</span>
+              </button>
+              <button class="module-summary ready" data-home-target="capital" type="button">
+                <span class="module-icon capital">$</span>
+                <span class="module-copy"><strong>Capital</strong><small id="homeCapitalModule">Budget and goals</small></span>
+                <span class="module-state">Live</span>
+              </button>
+              <button class="module-summary ready" data-home-target="academic" data-home-section="library" type="button">
+                <span class="module-icon research">R</span>
+                <span class="module-copy"><strong>Research library</strong><small id="homeLibraryModule">All source records</small></span>
+                <span class="module-state">Live</span>
+              </button>
+            </div>
+          </section>
+        </div>
+
+        <div id="academicView" class="view">
+          <section class="page-heading academic-dashboard-heading">
+            <div>
+              <p class="eyebrow">ACADEMIC COMMAND CENTER</p>
+              <h1>Classes</h1>
+              <p>See every course at once, then open the class you want to work in.</p>
+            </div>
+            <button class="button secondary" id="academicAddCourse" type="button">+ Add course</button>
+          </section>
+          <section class="academic-overview" id="academicOverview"></section>
+          <section class="academic-course-grid" id="academicCourseGrid" aria-label="Classes"></section>
+          <section class="academic-library" id="academicLibrary" aria-labelledby="academicLibraryTitle">
+            <div class="academic-library-heading">
+              <div><p class="kicker">ALL COURSE MATERIAL</p><h2 id="academicLibraryTitle">Research library</h2></div>
+              <span class="library-total"><strong id="libraryCount">12</strong> sources</span>
+            </div>
+            <div class="library-toolbar academic-library-toolbar">
+              <label class="library-search">
+                <span class="search-icon" aria-hidden="true"></span>
+                <input id="librarySearch" type="search" placeholder="Search title, author, course, or tag" />
+              </label>
+              <select id="libraryCourseFilter" aria-label="Filter by course"></select>
+            </div>
+            <div id="libraryGrid" class="library-grid"></div>
+          </section>
+        </div>
+
+        <div id="workspaceView" class="view">
+          <section class="course-hero" aria-labelledby="courseTitle">
+            <button class="course-back" id="backToAcademic" type="button" aria-label="Back to all classes">←</button>
+            <div class="course-heading">
+              <div class="course-icon" id="courseIcon">FI</div>
+              <div>
+                <div class="eyebrow" id="courseTerm">FALL 2026 · ACTIVE</div>
+                <h1 id="courseTitle">Finance</h1>
+                <p id="courseSubtitle">HADM 2220 · Build connected understanding from class material.</p>
+              </div>
+            </div>
+            <button class="button secondary" id="editCourse" type="button">Edit course</button>
+            <div class="hero-stats" id="heroStats"></div>
+          </section>
+
+          <section class="workspace-grid">
+            <div class="collection-panel sources-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="kicker">MATERIALS</p>
+                  <h2>Sources</h2>
+                </div>
+                <div class="panel-tools">
+                  <button class="text-button" id="addSource" type="button">+ Add source</button>
+                  <button class="text-button" id="viewAllSources" type="button">View all</button>
+                </div>
+              </div>
+              <div class="filter-row" role="group" aria-label="Source filters">
+                <button class="filter-chip active" data-source-filter="all" type="button">All</button>
+                <button class="filter-chip" data-source-filter="lecture" type="button">Lectures</button>
+                <button class="filter-chip" data-source-filter="paper" type="button">Papers</button>
+                <button class="filter-chip" data-source-filter="assignment" type="button">Assignments</button>
+              </div>
+              <div id="sourceList" class="source-list"></div>
+            </div>
+
+            <div class="collection-panel notes-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="kicker">YOUR THINKING</p>
+                  <h2>Notes</h2>
+                </div>
+                <div class="segmented" aria-label="Note display">
+                  <button class="segment active" data-note-view="recent" type="button">Recent</button>
+                  <button class="segment" data-note-view="linked" type="button">Linked</button>
+                </div>
+              </div>
+              <div id="noteList" class="note-list"></div>
+            </div>
+
+            <aside class="context-panel" aria-label="Citation inspector">
+              <div class="context-header">
+                <p class="kicker">CONTEXT</p>
+                <button class="quiet-icon" id="closeContext" type="button" aria-label="Close context panel">×</button>
+              </div>
+              <div id="contextEmpty" class="context-empty">
+                <div class="empty-orbit" aria-hidden="true"><span></span></div>
+                <h3>Select a source</h3>
+                <p>Open a source to inspect its notes, citation, and connections.</p>
+              </div>
+              <div id="contextContent" class="context-content" hidden></div>
+            </aside>
+          </section>
+        </div>
+
+        <div id="networkingView" class="view system-view"><div id="networkingDashboard"></div></div>
+        <div id="calendarView" class="view system-view"><div id="calendarDashboard"></div></div>
+        <div id="healthView" class="view system-view"><div id="healthDashboard"></div></div>
+        <div id="capitalView" class="view system-view"><div id="capitalDashboard"></div></div>
+
+        <div id="settingsView" class="view settings-view">
+          <section class="page-heading settings-heading">
+            <p class="eyebrow">WORKSPACE CONTROL</p>
+            <h1>Settings</h1>
+            <p>Shape the navigation, appearance, and connected services for your OS.</p>
+          </section>
+
+          <section class="settings-layout">
+            <article class="settings-card">
+              <div class="settings-card-heading"><div><p class="kicker">NAVIGATION</p><h2>Sidebar tabs</h2></div><span class="settings-badge">Saved automatically</span></div>
+              <p class="settings-description">Choose which workspaces appear in the left menu. Home and Settings stay available.</p>
+              <div class="tab-setting-list" id="tabSettingList"></div>
+            </article>
+
+            <article class="settings-card">
+              <div class="settings-card-heading"><div><p class="kicker">APPEARANCE</p><h2>Theme colors</h2></div><button class="text-button" id="resetTheme" type="button">Reset</button></div>
+              <p class="settings-description">Select a palette or tune the three core colors yourself.</p>
+              <div class="theme-presets" id="themePresets"></div>
+              <div class="color-control-grid">
+                <label>Accent<input id="themeAccent" type="color" value="#315e4b"></label>
+                <label>Page<input id="themePaper" type="color" value="#f5f4ef"></label>
+                <label>Sidebar<input id="themeSidebar" type="color" value="#16221d"></label>
+              </div>
+            </article>
+
+            <article class="settings-card settings-connections-card">
+              <div class="settings-card-heading"><div><p class="kicker">CONNECTIONS</p><h2>Connected services</h2></div><span class="settings-badge">Prototype map</span></div>
+              <p class="settings-description">Manage where outside information will enter the OS and how it maps into your records.</p>
+              <div id="connectionGrid" class="connection-grid settings-connection-grid"></div>
+              <div class="settings-flow"><span>Provider</span><i>→</i><span>Source record</span><i>→</i><span>Notes</span><i>→</i><span>Citation</span></div>
+            </article>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <dialog class="modal search-modal" id="searchModal">
+      <div class="modal-search-row">
+        <span class="search-icon" aria-hidden="true"></span>
+        <input id="globalSearchInput" type="search" placeholder="Search courses, notes, contacts, events, health, and capital" autocomplete="off" />
+        <kbd>ESC</kbd>
+      </div>
+      <div id="searchResults" class="search-results"></div>
+      <div class="modal-footer"><span>↑↓ Navigate</span><span>↵ Open</span></div>
+    </dialog>
+
+    <dialog class="modal capture-modal" id="captureModal">
+      <form id="captureForm" method="dialog">
+        <div class="modal-title-row">
+          <div>
+            <p class="kicker">QUICK CAPTURE</p>
+            <h2>Create a connected note</h2>
+          </div>
+          <button class="icon-button" value="cancel" aria-label="Close">×</button>
+        </div>
+        <label>
+          Title
+          <input id="noteTitleInput" name="title" required placeholder="What did you learn?" />
+        </label>
+        <label>
+          Note
+          <textarea id="noteBodyInput" name="body" required rows="5" placeholder="Capture the idea in your own words"></textarea>
+        </label>
+        <div class="form-row">
+          <label>
+            Course
+            <select id="noteCourseInput" name="course"></select>
+          </label>
+          <label>
+            Link source
+            <select id="noteSourceInput" name="source"></select>
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button class="button secondary" value="cancel" type="button" id="cancelCapture">Cancel</button>
+          <button class="button primary" value="default" type="submit">Save note</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="./app.js"></script>
+  </body>
+</html>
