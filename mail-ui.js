@@ -116,7 +116,7 @@ function localReplyDraft(message, tone = systemData.mail.preferences.replyTone) 
   else if (/due|deadline|assignment|problem set/.test(text)) response = "Thank you for the clarification. I’ve noted the updated deadline and will submit the work on time.";
   else if (/practice|location/.test(text)) response = "Thanks for the update. I’ve noted the location change and will arrive early.";
   if (tone === "warm") response += " I appreciate you letting me know.";
-  return `${opening}\n\n${response}\n\nBest,\nBlake`;
+  return `${opening}\n\n${response}\n\nBest,\n${window.AetherCurrentUserName || "Blake"}`;
 }
 
 function approveMailSuggestion(id, shouldRender = true) {
@@ -188,13 +188,7 @@ function useMailDefaults() {
   showToast("Academic triage defaults applied.");
 }
 
-async function connectMail() {
-  if (!window.AcademicOSMail) return showToast("Mail services are still loading. Try again in a moment.");
-  if (!window.AcademicOSMail.isConfigured()) return showToast("Add your Firebase web configuration to enable live Gmail.");
-  const button = $("[data-google-connect]");
-  if (button) { button.disabled = true; button.textContent = "Connecting…"; }
-  try {
-    const user = await window.AcademicOSMail.connect();
+async function activateGoogleWorkspace(user) {
     systemData.mail.connection = { ...systemData.mail.connection, mode: "live", connected: true, name: user.name || "Google user", email: user.email || "", lastSync: null, calendarLastSync: null, calendarError: "" };
     const savedPreferences = await window.AcademicOSMail.loadPreferences().catch(() => null);
     if (savedPreferences) systemData.mail.preferences = { ...systemData.mail.preferences, ...savedPreferences };
@@ -202,6 +196,16 @@ async function connectMail() {
     startGoogleWorkspaceTimer();
     await syncGoogleWorkspace(false);
     renderConnections();
+}
+
+async function connectMail() {
+  if (!window.AcademicOSMail) return showToast("Mail services are still loading. Try again in a moment.");
+  if (!window.AcademicOSMail.isConfigured()) return showToast("Add your Firebase web configuration to enable live Gmail.");
+  const button = $("[data-google-connect]");
+  if (button) { button.disabled = true; button.textContent = "Connecting…"; }
+  try {
+    const user = await window.AcademicOSMail.connect();
+    await activateGoogleWorkspace(user);
   } catch (error) {
     showToast(error.message || "Google connection was not completed.");
     renderConnections();
@@ -254,7 +258,13 @@ async function initializeGoogleWorkspace() {
     if (savedPreferences) systemData.mail.preferences = { ...systemData.mail.preferences, ...savedPreferences };
     saveSystemData();
     startGoogleWorkspaceTimer();
-    await syncGoogleWorkspace(true);
+    const lastSyncAge = systemData.mail.connection.lastSync ? Date.now() - new Date(systemData.mail.connection.lastSync).getTime() : Infinity;
+    if (lastSyncAge > 5 * 60 * 1000) await syncGoogleWorkspace(true);
+    else {
+      if (state.view === "mail") renderMailDashboard();
+      if (state.view === "calendar") renderCalendarDashboard();
+      if (state.view === "home") renderHome();
+    }
     renderConnections();
   } catch {
     systemData.mail.connection.connected = false;
@@ -319,6 +329,94 @@ async function syncGoogleWorkspace(silent = true) {
 }
 
 const syncMail = syncGoogleWorkspace;
+
+let aetherLoginInFlight = false;
+let aetherActiveUid = null;
+
+function setLoginState(message, isError = false) {
+  const status = $("#loginStatus");
+  if (!status) return;
+  status.textContent = message;
+  status.classList.toggle("error", isError);
+}
+
+function showAetherLogin(message = "") {
+  window.AetherWorkspace?.disableCloudSync();
+  aetherActiveUid = null;
+  $("#appShell").hidden = true;
+  $("#loginGate").hidden = false;
+  const button = $("#aetherGoogleLogin");
+  button.disabled = !window.AcademicOSMail?.isConfigured();
+  button.querySelector("span").textContent = "Continue with Google";
+  setLoginState(message || (button.disabled ? "Firebase needs to be configured before sign-in." : ""), button.disabled);
+  history.replaceState(null, "", "#login");
+}
+
+function updateAetherProfile(user) {
+  const name = user.name || user.displayName || user.email?.split("@")[0] || "Aether user";
+  const email = user.email || "Sign out";
+  window.AetherCurrentUserName = name.split(/\s+/)[0];
+  $("#profileName").textContent = name;
+  $("#profileEmail").textContent = email;
+  $("#profileAvatar").textContent = name.split(/\s+/).map(part => part[0]).slice(0, 2).join("").toUpperCase() || "A";
+  $("#profileButton").title = "Sign out of Aether";
+  const self = systemData.contacts.find(contact => contact.id === "c1");
+  if (self) { self.name = name; self.email = user.email || self.email; }
+  renderHome();
+  saveSystemData();
+}
+
+async function enterAether(user, liveGoogleUser = null) {
+  const uid = user?.uid;
+  if (!uid || (aetherActiveUid === uid && !liveGoogleUser)) return;
+  aetherActiveUid = uid;
+  $("#aetherGoogleLogin").disabled = true;
+  setLoginState("Restoring your Aether workspace…");
+  let cloudWorkspace = null;
+  try { cloudWorkspace = await window.AcademicOSMail.loadWorkspace(); } catch { cloudWorkspace = null; }
+  if (cloudWorkspace) window.AetherWorkspace?.hydrate(cloudWorkspace);
+  window.AetherWorkspace?.enableCloudSync();
+  updateAetherProfile(liveGoogleUser || user);
+  $("#loginGate").hidden = true;
+  $("#appShell").hidden = false;
+  if (location.hash === "#login") switchView("home");
+  if (!cloudWorkspace) await window.AetherWorkspace?.saveNow();
+  if (liveGoogleUser) await activateGoogleWorkspace(liveGoogleUser);
+  else await initializeGoogleWorkspace();
+}
+
+async function initializeAetherAuth() {
+  const service = window.AcademicOSMail;
+  const loginButton = $("#aetherGoogleLogin");
+  if (!service?.isConfigured()) return showAetherLogin("Firebase needs to be configured before sign-in.");
+  loginButton.disabled = false;
+  loginButton.addEventListener("click", async () => {
+    aetherLoginInFlight = true;
+    loginButton.disabled = true;
+    loginButton.querySelector("span").textContent = "Connecting…";
+    setLoginState("Google will ask once for Gmail and Calendar access.");
+    try {
+      const googleUser = await service.connect();
+      await enterAether(googleUser, googleUser);
+    } catch (error) {
+      loginButton.disabled = false;
+      loginButton.querySelector("span").textContent = "Continue with Google";
+      setLoginState(error.message || "Google sign-in was not completed.", true);
+    } finally {
+      aetherLoginInFlight = false;
+    }
+  });
+  $("#profileButton").addEventListener("click", async () => {
+    if (!confirm("Sign out of Aether on this device?")) return;
+    await window.AetherWorkspace?.saveNow();
+    await service.disconnect();
+  });
+  await service.observeAuth(user => {
+    if (aetherLoginInFlight) return;
+    if (!user) showAetherLogin();
+    else enterAether(user);
+  });
+}
 
 function renderHomeMailWidgets() {
   const root = $("#homeMailIntelligence");
@@ -438,4 +536,4 @@ function renderMailDashboard() {
   if (navCount) { navCount.textContent = urgent.length; navCount.hidden = !urgent.length; }
 }
 
-document.addEventListener("academic-os-mail-ready", initializeGoogleWorkspace, { once: true });
+document.addEventListener("academic-os-mail-ready", initializeAetherAuth, { once: true });

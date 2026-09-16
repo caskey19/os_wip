@@ -303,7 +303,7 @@ const integrations = [
     name: "GitHub",
     short: "GH",
     color: "#29312d",
-    description: "Sync product architecture, schemas, issues, and technical decisions from the Academic OS repository.",
+    description: "Sync product architecture, schemas, issues, and technical decisions from the Aether repository.",
     map: "Repositories → projects and design records"
   },
   {
@@ -365,6 +365,7 @@ function persistAcademicData() {
   localStorage.setItem("academicOsCourses", JSON.stringify(courses));
   localStorage.setItem("academicOsCourse", state.courseId);
   $("#noteCourseInput").innerHTML = courses.map(course => `<option value="${course.id}">${escapeHtml(course.code)} · ${escapeHtml(course.name)}</option>`).join("");
+  scheduleCloudSave();
 }
 
 function openAcademicForm(title, kicker, fields, onSave, onDelete = null) {
@@ -550,11 +551,110 @@ let homeDayPeriod = "all";
 let mailSelectedId = systemData.mail.messages[0]?.id || null;
 let mailFilter = "all";
 let mailQuery = "";
-const saveSystemData = () => localStorage.setItem("brain-os-v3", JSON.stringify(systemData));
+let cloudSyncEnabled = false;
+let cloudHydrating = false;
+let cloudSaveTimer = null;
+const saveSystemData = () => {
+  localStorage.setItem("brain-os-v3", JSON.stringify(systemData));
+  scheduleCloudSave();
+};
 const saveNetworkFilter = () => {
   localStorage.setItem("aetherNetworkMode", networkFilterMode);
   localStorage.setItem("aetherNetworkCompany", networkFilterCompany);
   localStorage.setItem("aetherNetworkPerson", networkFilterPerson);
+  scheduleCloudSave();
+};
+
+function aetherWorkspaceSnapshot() {
+  return {
+    courses,
+    systemData,
+    preferences: { tabs: tabPreferences, theme: themePreferences },
+    navigation: {
+      courseId: state.courseId,
+      networkFilterMode,
+      networkFilterCompany,
+      networkFilterPerson
+    }
+  };
+}
+
+function setCloudSyncLabel(label, stateName = "") {
+  const element = $("#cloudSyncLabel");
+  if (!element) return;
+  element.textContent = label;
+  element.dataset.state = stateName;
+}
+
+async function saveCloudWorkspaceNow() {
+  if (!cloudSyncEnabled || cloudHydrating || !window.AcademicOSMail?.saveWorkspace) return false;
+  clearTimeout(cloudSaveTimer);
+  cloudSaveTimer = null;
+  setCloudSyncLabel("Saving to Aether…", "saving");
+  try {
+    await window.AcademicOSMail.saveWorkspace(aetherWorkspaceSnapshot());
+    setCloudSyncLabel("Saved across devices", "saved");
+    return true;
+  } catch {
+    setCloudSyncLabel("Saved on this device", "local");
+    return false;
+  }
+}
+
+function scheduleCloudSave() {
+  if (!cloudSyncEnabled || cloudHydrating) return;
+  clearTimeout(cloudSaveTimer);
+  setCloudSyncLabel("Saving changes…", "saving");
+  cloudSaveTimer = window.setTimeout(saveCloudWorkspaceNow, 900);
+}
+
+function hydrateAetherWorkspace(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") return false;
+  cloudHydrating = true;
+  if (Array.isArray(snapshot.courses) && snapshot.courses.length) courses = snapshot.courses;
+  if (snapshot.systemData && typeof snapshot.systemData === "object") systemData = snapshot.systemData;
+  ["contacts", "links", "opportunities", "events", "health", "transactions", "subscriptions", "goals", "mailSuggestions"].forEach(key => {
+    if (!Array.isArray(systemData[key])) systemData[key] = structuredClone(systemSeed[key]);
+  });
+  if (!systemData.mail || typeof systemData.mail !== "object") systemData.mail = structuredClone(systemSeed.mail);
+  systemData.mail.connection = { ...systemSeed.mail.connection, ...(systemData.mail.connection || {}), connected: false, calendarError: "" };
+  systemData.mail.preferences = { ...systemSeed.mail.preferences, ...(systemData.mail.preferences || {}) };
+  if (!Array.isArray(systemData.mail.messages)) systemData.mail.messages = structuredClone(systemSeed.mail.messages);
+  tabPreferences = { ...defaultTabPreferences, ...(snapshot.preferences?.tabs || {}) };
+  themePreferences = { ...themePresets.forest, ...(snapshot.preferences?.theme || {}) };
+  state.courseId = courses.some(course => course.id === snapshot.navigation?.courseId) ? snapshot.navigation.courseId : courses[0]?.id;
+  networkFilterMode = ["all", "company", "person"].includes(snapshot.navigation?.networkFilterMode) ? snapshot.navigation.networkFilterMode : "all";
+  networkFilterCompany = snapshot.navigation?.networkFilterCompany || "";
+  networkFilterPerson = snapshot.navigation?.networkFilterPerson || systemData.contacts[0]?.id || "";
+  selectedSystemContact = systemData.contacts.some(contact => contact.id === selectedSystemContact) ? selectedSystemContact : systemData.contacts[0]?.id;
+  mailSelectedId = systemData.mail.messages.some(message => message.id === mailSelectedId) ? mailSelectedId : systemData.mail.messages[0]?.id || null;
+  localStorage.setItem("academicOsCourses", JSON.stringify(courses));
+  localStorage.setItem("academicOsCourse", state.courseId);
+  localStorage.setItem("brain-os-v3", JSON.stringify(systemData));
+  localStorage.setItem("aetherVisibleTabs", JSON.stringify(tabPreferences));
+  localStorage.setItem("aetherTheme", JSON.stringify(themePreferences));
+  localStorage.setItem("aetherNetworkMode", networkFilterMode);
+  localStorage.setItem("aetherNetworkCompany", networkFilterCompany);
+  localStorage.setItem("aetherNetworkPerson", networkFilterPerson);
+  applyTheme();
+  applyTabPreferences();
+  renderWorkspace();
+  renderAcademicDashboard();
+  renderConnections();
+  renderHome();
+  renderSystemView(state.view);
+  if (state.view === "settings") renderSettings();
+  cloudHydrating = false;
+  return true;
+}
+
+window.AetherWorkspace = {
+  hydrate: hydrateAetherWorkspace,
+  snapshot: aetherWorkspaceSnapshot,
+  enableCloudSync() { cloudSyncEnabled = true; },
+  disableCloudSync() { cloudSyncEnabled = false; clearTimeout(cloudSaveTimer); },
+  saveNow: saveCloudWorkspaceNow,
+  setSyncLabel: setCloudSyncLabel
 };
 const systemId = prefix => `${prefix}${Date.now()}${Math.floor(Math.random() * 99)}`;
 const niceSystemDate = value => new Date(`${value}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -861,12 +961,14 @@ function renderSettings() {
   $$('[data-tab-toggle]').forEach(input => input.addEventListener("change", () => {
     tabPreferences[input.dataset.tabToggle] = input.checked;
     localStorage.setItem("aetherVisibleTabs", JSON.stringify(tabPreferences));
+    scheduleCloudSave();
     applyTabPreferences();
     showToast(`${tabLabels[input.dataset.tabToggle]} ${input.checked ? "shown" : "hidden"}.`);
   }));
   $$('[data-theme-preset]').forEach(button => button.addEventListener("click", () => {
     themePreferences = { ...themePresets[button.dataset.themePreset] };
     localStorage.setItem("aetherTheme", JSON.stringify(themePreferences));
+    scheduleCloudSave();
     applyTheme();
     renderSettings();
     showToast("Theme updated.");
@@ -876,6 +978,7 @@ function renderSettings() {
 function updateCustomTheme() {
   themePreferences = { name: "Custom", accent: $("#themeAccent").value, paper: $("#themePaper").value, sidebar: $("#themeSidebar").value };
   localStorage.setItem("aetherTheme", JSON.stringify(themePreferences));
+  scheduleCloudSave();
   applyTheme();
   $$('[data-theme-preset]').forEach(button => button.classList.remove("active"));
 }
@@ -1002,6 +1105,7 @@ function selectCourse(courseId, sourceId = null) {
   state.sourceFilter = "all";
   state.selectedSourceId = null;
   localStorage.setItem("academicOsCourse", courseId);
+  scheduleCloudSave();
   switchView("workspace");
   $$(".filter-chip").forEach(chip => chip.classList.toggle("active", chip.dataset.sourceFilter === "all"));
   renderWorkspace();
@@ -1041,7 +1145,7 @@ function renderHome() {
   });
 
   $("#homeDate").textContent = dateLabel;
-  $("#homeTitle").textContent = `${greeting}, Blake.`;
+  $("#homeTitle").textContent = `${greeting}, ${window.AetherCurrentUserName || "Blake"}.`;
   $("#homeFocusStatus").innerHTML = `<i></i>${todayEvents.length ? `${todayEvents.length} scheduled` : "Focused"}`;
   $("#homePriorityList").innerHTML = todayEvents.length ? todayEvents.slice(0, 3).map((event, index) => `
     <button class="priority-item" data-home-event="${event.id}" type="button">
@@ -1080,15 +1184,15 @@ function switchView(view) {
   target.classList.add("active-view");
   $$(".nav-item").forEach(button => button.classList.toggle("active", button.dataset.view === view || (view === "workspace" && button.dataset.view === "academic")));
   const breadcrumbs = {
-    home: ["Second Brain", "Home"],
+    home: ["Aether", "Home"],
     academic: ["Academic", "Classes"],
     workspace: ["Academic", currentCourse().code],
-    networking: ["Second Brain", "Networking"],
-    calendar: ["Second Brain", "Calendar"],
-    mail: ["Second Brain", "Mail"],
-    health: ["Second Brain", "Health & performance"],
-    capital: ["Second Brain", "Capital"],
-    settings: ["Second Brain", "Settings"]
+    networking: ["Aether", "Networking"],
+    calendar: ["Aether", "Calendar"],
+    mail: ["Aether", "Mail"],
+    health: ["Aether", "Health & performance"],
+    capital: ["Aether", "Capital"],
+    settings: ["Aether", "Settings"]
   };
   const [root, detail] = breadcrumbs[view];
   $("#breadcrumbRoot").textContent = root;
@@ -1310,6 +1414,7 @@ function setupEvents() {
   $("#resetTheme").addEventListener("click", () => {
     themePreferences = { ...themePresets.forest };
     localStorage.setItem("aetherTheme", JSON.stringify(themePreferences));
+    scheduleCloudSave();
     applyTheme();
     renderSettings();
     showToast("Original theme restored.");
@@ -1318,7 +1423,6 @@ function setupEvents() {
     switchView(button.dataset.homeTarget);
   }));
   $$('[data-home-course]').forEach(button => button.addEventListener("click", () => selectCourse(button.dataset.homeCourse)));
-  $("#profileButton").addEventListener("click", () => showToast("This private prototype stores changes in your browser."));
   $("#openSidebar").addEventListener("click", openSidebar);
   $("#closeSidebar").addEventListener("click", closeSidebar);
   $("#sidebarScrim").addEventListener("click", closeSidebar);

@@ -21,10 +21,12 @@ async function modules() {
       import(`${FIREBASE_BASE}/firebase-firestore.js`)
     ]);
     const app = appModule.getApps().length ? appModule.getApp() : appModule.initializeApp(config.firebase);
+    const auth = authModule.getAuth(app);
+    await authModule.setPersistence(auth, authModule.browserLocalPersistence);
     firebaseModules = {
       ...authModule,
       ...firestoreModule,
-      auth: authModule.getAuth(app),
+      auth,
       db: firestoreModule.getFirestore(app)
     };
   }
@@ -34,7 +36,7 @@ async function modules() {
 async function connect() {
   const sdk = await modules();
   const provider = new sdk.GoogleAuthProvider();
-  provider.setCustomParameters({ prompt: "consent", access_type: "offline" });
+  provider.setCustomParameters({ prompt: "select_account" });
   provider.addScope("https://www.googleapis.com/auth/gmail.modify");
   provider.addScope("https://www.googleapis.com/auth/calendar.events");
   provider.addScope("https://www.googleapis.com/auth/calendar.calendarlist.readonly");
@@ -67,10 +69,38 @@ async function restoreSession() {
 }
 
 async function disconnect() {
-  if (!firebaseModules) return;
-  await firebaseModules.signOut(firebaseModules.auth);
+  const sdk = await modules();
+  await sdk.signOut(sdk.auth);
   sessionStorage.removeItem(SESSION_KEY);
   session = { user: null, accessToken: null };
+}
+
+async function observeAuth(callback) {
+  const sdk = await modules();
+  return sdk.onAuthStateChanged(sdk.auth, user => {
+    session.user = user;
+    callback(user);
+  });
+}
+
+async function loadWorkspace() {
+  if (!session.user) return null;
+  const sdk = await modules();
+  const snapshot = await sdk.getDoc(sdk.doc(sdk.db, "users", session.user.uid, "workspace", "state"));
+  if (!snapshot.exists()) return null;
+  return snapshot.data().payload || null;
+}
+
+async function saveWorkspace(payload) {
+  if (!session.user || !payload) return false;
+  const sdk = await modules();
+  const safePayload = JSON.parse(JSON.stringify(payload));
+  await sdk.setDoc(sdk.doc(sdk.db, "users", session.user.uid, "workspace", "state"), {
+    schemaVersion: 1,
+    payload: safePayload,
+    updatedAt: sdk.serverTimestamp()
+  }, { merge: true });
+  return true;
 }
 
 function authHeaders(extra = {}) {
@@ -289,6 +319,7 @@ async function runAI(payload) {
 window.AcademicOSMail = {
   isConfigured,
   connect,
+  observeAuth,
   restoreSession,
   disconnect,
   fetchInbox,
@@ -299,6 +330,8 @@ window.AcademicOSMail = {
   createCalendarEvent,
   savePreferences,
   loadPreferences,
+  saveWorkspace,
+  loadWorkspace,
   runAI,
   getSession: () => ({ user: session.user ? { uid: session.user.uid, name: session.user.displayName, email: session.user.email, photoURL: session.user.photoURL } : null, connected: Boolean(session.accessToken) })
 };
