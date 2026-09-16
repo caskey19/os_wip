@@ -2718,6 +2718,24 @@ a.nav-item {
 /* Mail intelligence */
 .mail-workspace,
 .calendar-mail-automation { margin-top: 18px; }
+.google-calendar-status {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  margin-top: 18px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.68);
+}
+.google-calendar-status.is-connected { border-color: color-mix(in srgb, var(--green) 35%, var(--line)); }
+.google-calendar-status.has-error { border-color: #dfb0a6; background: #fff8f5; }
+.google-calendar-mark { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 11px; color: white; background: linear-gradient(135deg, #4285f4, #34a853); font-size: 15px; font-weight: 900; }
+.google-calendar-copy { min-width: 0; }
+.google-calendar-copy h2 { margin: 3px 0; font: 500 18px Georgia, serif; }
+.google-calendar-copy p:not(.kicker) { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.google-calendar-status.has-error .google-calendar-copy h2 { color: #8e3f31; }
 .mail-spark {
   display: grid;
   width: 34px;
@@ -2934,3 +2952,4 @@ a.nav-item {
 @media (max-width: 1180px) { .metric-grid { grid-template-columns: repeat(2,1fr); }.recovery-alert { grid-column: 1/-1; }.calendar-content { grid-template-columns: 1fr; }.daily-brief { border-top: 1px solid var(--line); }.capital-overview { grid-template-columns: 1fr .65fr; }.opportunity-filters { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 900px) { .system-stats { display: none; }.system-split,.capital-overview { grid-template-columns: 1fr; }.system-split > .collection-panel { border-right: 0; border-bottom: 1px solid var(--line); }.contact-detail { border-bottom: 0!important; }.calendar-toolbar { align-items: flex-start; flex-direction: column; }.calendar-controls { flex-wrap: wrap; }.capital-lists { grid-template-columns: 1fr; } }
 @media (max-width: 680px) { .system-heading { padding-top: 38px; }.metric-grid { grid-template-columns: 1fr; }.recovery-alert { grid-column: auto; align-items: flex-start; flex-direction: column; }.calendar-shell { padding: 13px; }.calendar-controls .segmented { order: 2; width: 100%; margin-left: 0; }.calendar-controls { width: 100%; }.month-cell { min-height: 70px; padding: 5px; }.month-cell > span { width: 7px; height: 7px; padding: 0; border-radius: 50%; font-size: 0; }.cash-totals { grid-template-columns: 1fr; }.cash-totals > div+div { border-left: 0; border-top: 1px solid var(--line); }.network-filter-bar { align-items: stretch; flex-direction: column; }.network-mode-tabs { display: grid; grid-template-columns: repeat(3,1fr); }.network-mode-tabs .segment { padding: 0 6px; }.network-filter-select { width: 100%; min-width: 0; }.network-view-summary { min-height: 34px; padding-left: 8px; }.network-map { height: 470px; }.network-company-node { min-width: 150px; }.network-node { width: 86px; }.network-node strong,.network-node small { max-width: 86px; }.opportunities-heading { align-items: stretch; flex-direction: column; }.opportunities-heading .button { align-self: flex-start; }.opportunity-filters { grid-template-columns: 1fr; }.opportunity-results,.opportunity-detail { padding: 16px; }.opportunity-facts { grid-template-columns: 1fr; } }
+@media (max-width: 680px) { .google-calendar-status { grid-template-columns: auto minmax(0, 1fr); }.google-calendar-status .button { grid-column: 1 / -1; width: 100%; } }

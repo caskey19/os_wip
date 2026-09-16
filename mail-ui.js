@@ -195,7 +195,7 @@ async function connectMail() {
   if (button) { button.disabled = true; button.textContent = "Connecting…"; }
   try {
     const user = await window.AcademicOSMail.connect();
-    systemData.mail.connection = { mode: "live", connected: true, name: user.name || "Google user", email: user.email || "", lastSync: null };
+    systemData.mail.connection = { ...systemData.mail.connection, mode: "live", connected: true, name: user.name || "Google user", email: user.email || "", lastSync: null, calendarLastSync: null, calendarError: "" };
     const savedPreferences = await window.AcademicOSMail.loadPreferences().catch(() => null);
     if (savedPreferences) systemData.mail.preferences = { ...systemData.mail.preferences, ...savedPreferences };
     saveSystemData();
@@ -216,7 +216,8 @@ function startGoogleWorkspaceTimer() {
 }
 
 function mergeGoogleCalendarEvents(events) {
-  events.forEach(incoming => {
+  const incomingEvents = Array.isArray(events) ? events : events.events || [];
+  incomingEvents.forEach(incoming => {
     const existing = systemData.events.find(event => event.externalId === incoming.externalId);
     if (!existing) {
       systemData.events.push(incoming);
@@ -229,6 +230,14 @@ function mergeGoogleCalendarEvents(events) {
   });
 }
 
+function friendlyCalendarError(error) {
+  const message = String(error?.message || "Google Calendar could not be synced.");
+  if (/insufficient.*scope|authentication scopes|permission/i.test(message)) return "Reconnect Google to approve Calendar access.";
+  if (/has not been used|accessnotconfigured|disabled/i.test(`${message} ${error?.reason || ""}`)) return "Google Calendar API must be enabled for this Firebase project.";
+  if (error?.status === 401) return "Your Google session expired. Reconnect to continue syncing.";
+  return message;
+}
+
 async function initializeGoogleWorkspace() {
   if (!window.AcademicOSMail?.isConfigured()) return;
   try {
@@ -237,6 +246,7 @@ async function initializeGoogleWorkspace() {
       systemData.mail.connection.connected = false;
       saveSystemData();
       renderConnections();
+      if (state.view === "calendar") renderCalendarDashboard();
       return;
     }
     systemData.mail.connection = { ...systemData.mail.connection, mode: "live", connected: true, name: restored.name || "Google user", email: restored.email || "" };
@@ -249,6 +259,7 @@ async function initializeGoogleWorkspace() {
   } catch {
     systemData.mail.connection.connected = false;
     saveSystemData();
+    if (state.view === "calendar") renderCalendarDashboard();
   }
 }
 
@@ -279,15 +290,30 @@ async function syncGoogleWorkspace(silent = true) {
       if (!messages.some(message => message.id === mailSelectedId)) mailSelectedId = messages[0]?.id || null;
       refreshMailSuggestions();
     }
-    if (calendarResult.status === "fulfilled") mergeGoogleCalendarEvents(calendarResult.value);
+    if (calendarResult.status === "fulfilled") {
+      mergeGoogleCalendarEvents(calendarResult.value);
+      systemData.mail.connection.calendarLastSync = new Date().toISOString();
+      systemData.mail.connection.calendarError = "";
+      systemData.mail.connection.calendarCount = calendarResult.value.calendars?.length || 1;
+      systemData.mail.connection.googleEventCount = calendarResult.value.events?.length || 0;
+    } else {
+      systemData.mail.connection.calendarError = friendlyCalendarError(calendarResult.reason);
+    }
     if (mailResult.status === "rejected" && calendarResult.status === "rejected") throw mailResult.reason;
     systemData.mail.connection.lastSync = new Date().toISOString();
     saveSystemData();
     if (state.view === "mail") renderMailDashboard();
     if (state.view === "calendar") renderCalendarDashboard();
     if (state.view === "home") renderHome();
-    if (!silent) showToast("Mail and Google Calendar are up to date.");
+    if (!silent) {
+      if (calendarResult.status === "rejected") showToast(`Inbox synced, but Calendar needs attention: ${systemData.mail.connection.calendarError}`);
+      else if (mailResult.status === "rejected") showToast("Google Calendar synced, but the inbox could not be refreshed.");
+      else showToast("Mail and Google Calendar are up to date.");
+    }
   } catch (error) {
+    systemData.mail.connection.calendarError ||= friendlyCalendarError(error);
+    saveSystemData();
+    if (state.view === "calendar") renderCalendarDashboard();
     if (!silent) showToast(error.message || "Google sync needs to be reconnected in Settings.");
   }
 }

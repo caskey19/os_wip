@@ -37,10 +37,11 @@ async function connect() {
   provider.setCustomParameters({ prompt: "consent", access_type: "offline" });
   provider.addScope("https://www.googleapis.com/auth/gmail.modify");
   provider.addScope("https://www.googleapis.com/auth/calendar.events");
+  provider.addScope("https://www.googleapis.com/auth/calendar.calendarlist.readonly");
   const result = await sdk.signInWithPopup(sdk.auth, provider);
   const credential = sdk.GoogleAuthProvider.credentialFromResult(result);
   session = { user: result.user, accessToken: credential?.accessToken || null };
-  if (!session.accessToken) throw new Error("Google did not return an inbox access token. Please reconnect.");
+  if (!session.accessToken) throw new Error("Google did not return a workspace access token. Please reconnect.");
   sessionStorage.setItem(SESSION_KEY, JSON.stringify({ accessToken: session.accessToken, expiresAt: Date.now() + 55 * 60 * 1000 }));
   return { uid: result.user.uid, name: result.user.displayName, email: result.user.email, photoURL: result.user.photoURL };
 }
@@ -106,7 +107,10 @@ async function googleJson(url, options = {}) {
   const response = await fetch(url, { ...options, headers: authHeaders(options.headers) });
   if (!response.ok) {
     const detail = await response.json().catch(() => ({}));
-    throw new Error(detail.error?.message || `Google request failed (${response.status}).`);
+    const error = new Error(detail.error?.message || `Google request failed (${response.status}).`);
+    error.status = response.status;
+    error.reason = detail.error?.errors?.[0]?.reason || detail.error?.status || "";
+    throw error;
   }
   return response.status === 204 ? null : response.json();
 }
@@ -170,17 +174,33 @@ async function trashMessage(messageId) {
   return googleJson(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/trash`, { method: "POST" });
 }
 
+async function fetchGoogleCalendars() {
+  const calendars = [];
+  let pageToken = "";
+  do {
+    const params = new URLSearchParams({ maxResults: "250", showDeleted: "false", showHidden: "false" });
+    if (pageToken) params.set("pageToken", pageToken);
+    const response = await googleJson(`https://www.googleapis.com/calendar/v3/users/me/calendarList?${params}`);
+    calendars.push(...(response.items || []));
+    pageToken = response.nextPageToken || "";
+  } while (pageToken);
+  return calendars.filter(calendar => !calendar.deleted && calendar.accessRole !== "freeBusyReader" && (calendar.primary || calendar.selected));
+}
+
 async function fetchCalendarEvents(timeMin, timeMax) {
-  const params = new URLSearchParams({
-    timeMin,
-    timeMax,
-    singleEvents: "true",
-    orderBy: "startTime",
-    showDeleted: "false",
-    maxResults: "2500"
-  });
-  const response = await googleJson(`https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`);
-  return (response.items || []).filter(event => event.status !== "cancelled").map(event => {
+  const calendars = await fetchGoogleCalendars();
+  const readableCalendars = calendars.length ? calendars : [{ id: "primary", summary: "Primary", primary: true }];
+  const results = await Promise.allSettled(readableCalendars.map(async calendar => {
+    const params = new URLSearchParams({
+      timeMin,
+      timeMax,
+      singleEvents: "true",
+      orderBy: "startTime",
+      showDeleted: "false",
+      maxResults: "2500"
+    });
+    const response = await googleJson(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendar.id)}/events?${params}`);
+    return (response.items || []).filter(event => event.status !== "cancelled").map(event => {
     const allDay = Boolean(event.start?.date);
     const startValue = event.start?.dateTime || event.start?.date || new Date().toISOString();
     const endValue = event.end?.dateTime || event.end?.date || startValue;
@@ -188,8 +208,11 @@ async function fetchCalendarEvents(timeMin, timeMax) {
     const end = allDay ? "10:00" : endValue.slice(11, 16);
     return {
       id: `google-${event.id}`,
-      externalId: `google-calendar:${event.id}`,
+      externalId: calendar.primary ? `google-calendar:${event.id}` : `google-calendar:${calendar.id}:${event.id}`,
       googleEventId: event.id,
+      googleCalendarId: calendar.id,
+      calendarName: calendar.summaryOverride || calendar.summary || "Google Calendar",
+      calendarColor: calendar.backgroundColor || "#4f72a6",
       title: event.summary || "Untitled Google Calendar event",
       date: startValue.slice(0, 10),
       start,
@@ -202,7 +225,15 @@ async function fetchCalendarEvents(timeMin, timeMax) {
       htmlLink: event.htmlLink || "",
       updated: event.updated || ""
     };
-  });
+    });
+  }));
+  const fulfilled = results.filter(result => result.status === "fulfilled");
+  if (!fulfilled.length && results.length) throw results[0].reason;
+  return {
+    events: fulfilled.flatMap(result => result.value),
+    calendars: readableCalendars.map(calendar => ({ id: calendar.id, name: calendar.summaryOverride || calendar.summary || "Google Calendar", primary: Boolean(calendar.primary) })),
+    failedCalendars: results.length - fulfilled.length
+  };
 }
 
 function addOneHour(time) {
