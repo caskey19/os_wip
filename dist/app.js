@@ -550,6 +550,7 @@ let networkFilterCompany = localStorage.getItem("aetherNetworkCompany") || "";
 let networkFilterPerson = localStorage.getItem("aetherNetworkPerson") || selectedSystemContact;
 let systemCalendarView = "week";
 let systemCalendarDate = systemToday;
+let homeDayPeriod = "all";
 let mailSelectedId = systemData.mail.messages[0]?.id || null;
 let mailFilter = "all";
 let mailQuery = "";
@@ -722,7 +723,7 @@ function eventRecordForm(id = null, date = systemCalendarDate) {
     if (data.get("end") <= data.get("start")) { showToast("End time must be after start time."); return false; }
     const record = { id: id || systemId("e"), title: data.get("title").trim(), date: data.get("date"), start: data.get("start"), end: data.get("end"), source: data.get("source"), priority: data.get("priority"), zone: data.get("zone"), notes: data.get("notes").trim() };
     if (id) Object.assign(event, record); else systemData.events.push(record);
-    saveSystemData(); renderCalendarDashboard(); showToast(id ? "Event updated." : "Event added.");
+    saveSystemData(); renderCalendarDashboard(); if (state.view === "home") renderHome(); showToast(id ? "Event updated." : "Event added.");
   }, id ? () => { systemData.events = systemData.events.filter(item => item.id !== id); saveSystemData(); renderCalendarDashboard(); showToast("Event deleted."); } : null);
 }
 
@@ -1016,61 +1017,30 @@ function renderWorkspace() {
   updateCaptureSources();
 }
 
-function updateHomeClock() {
-  const now = new Date();
-  let hours = now.getHours();
-  const period = hours >= 12 ? "PM" : "AM";
-  hours = hours % 12 || 12;
-  const minutes = String(now.getMinutes()).padStart(2, "0");
-  const seconds = String(now.getSeconds()).padStart(2, "0");
-  const time = `${String(hours).padStart(2, "0")}:${minutes}`;
-  $("#homeClockTime").textContent = time;
-  $("#homeClockTime").dateTime = now.toISOString();
-  $("#homeClockSeconds").textContent = seconds;
-  $("#homeClockPeriod").textContent = period;
-}
-
 function renderHome() {
   const now = new Date();
   const hour = now.getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const dateLabel = now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
-  const sources = allSources();
-  const notes = courses.flatMap(course => course.notes);
   const todayEvents = systemData.events.filter(event => event.date === systemToday).sort((a, b) => a.start.localeCompare(b.start));
   const nextEvent = todayEvents.find(event => event.end >= now.toTimeString().slice(0, 5)) || todayEvents[0];
   const latestHealth = systemData.health[0] || { recovery: 0, sleep: 0, workout: "No performance log" };
-  const contactCount = Math.max(0, systemData.contacts.length - 1);
-  const income = systemData.transactions.filter(item => item.amount > 0).reduce((sum, item) => sum + item.amount, 0);
-  const spent = -systemData.transactions.filter(item => item.amount < 0).reduce((sum, item) => sum + item.amount, 0);
-  const net = income - spent;
-  const linkedSourceCount = sources.filter(source => {
-    const course = courses.find(item => item.id === source.courseId);
-    return course && course.notes.some(note => note.sourceId === source.id);
-  }).length;
-  const linkRate = sources.length ? Math.round((linkedSourceCount / sources.length) * 100) : 0;
-  const verificationCount = sources.filter(source => source.status.toLowerCase().includes("needs")).length;
+  const toMinutes = value => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
+  const formatTime = value => {
+    const [hours, minutes] = value.split(":").map(Number);
+    return `${hours % 12 || 12}${minutes ? `:${String(minutes).padStart(2, "0")}` : ""} ${hours >= 12 ? "PM" : "AM"}`;
+  };
+  const scheduledMinutes = todayEvents.reduce((total, event) => total + Math.max(0, toMinutes(event.end) - toMinutes(event.start)), 0);
+  const filteredDayEvents = todayEvents.filter(event => {
+    const startHour = Number(event.start.slice(0, 2));
+    if (homeDayPeriod === "morning") return startHour < 12;
+    if (homeDayPeriod === "afternoon") return startHour >= 12 && startHour < 17;
+    if (homeDayPeriod === "evening") return startHour >= 17;
+    return true;
+  });
 
-  $("#homeDate").textContent = `${dateLabel} · Your command center`;
+  $("#homeDate").textContent = dateLabel;
   $("#homeTitle").textContent = `${greeting}, Blake.`;
-  $("#homeLinkRate").textContent = `${linkRate}%`;
-  $("#homeScoreRing").style.setProperty("--score", `${linkRate}%`);
-  $("#homeAcademicSummary").textContent = `${linkedSourceCount} of ${sources.length} sources have at least one connected note.`;
-  $("#homeAcademicStats").innerHTML = [
-    [courses.length, "Courses"],
-    [notes.length, "Notes"],
-    [verificationCount, "To verify"]
-  ].map(([value, label]) => `<div class="home-mini-stat"><strong>${value}</strong><span>${label}</span></div>`).join("");
-  $("#homeAcademicModule").textContent = `${courses.length} courses · ${notes.length} notes`;
-  $("#homeLibraryModule").textContent = `${sources.length} source records`;
-  $("#homeCalendarModule").textContent = `${todayEvents.length} commitments today`;
-  const unreadMail = systemData.mail.messages.filter(message => message.unread).length;
-  const pendingMail = systemData.mailSuggestions.filter(item => item.status === "pending").length;
-  $("#homeMailModule").textContent = `${unreadMail} unread · ${pendingMail} calendar proposal${pendingMail === 1 ? "" : "s"}`;
-  $("#homeMailState").textContent = systemData.mail.connection.connected ? "Synced" : "Preview";
-  $("#homeNetworkingModule").textContent = `${contactCount} contacts · ${systemData.links.length} connections`;
-  $("#homeHealthModule").textContent = `${latestHealth.recovery} recovery · ${latestHealth.sleep} hours sleep`;
-  $("#homeCapitalModule").textContent = `${systemMoney(net)} current net flow`;
   $("#homeFocusStatus").innerHTML = `<i></i>${todayEvents.length ? `${todayEvents.length} scheduled` : "Focused"}`;
   $("#homePriorityList").innerHTML = todayEvents.length ? todayEvents.slice(0, 3).map((event, index) => `
     <button class="priority-item" data-home-event="${event.id}" type="button">
@@ -1081,10 +1051,17 @@ function renderHome() {
   `).join("") : `
     <button class="priority-item" data-home-course="finance" type="button"><span class="priority-time">01</span><span class="priority-copy"><strong>Review multiple cash flows</strong><small>Finance · linked to Lecture 3</small></span><span class="priority-arrow">→</span></button>
     <button class="priority-item" data-home-course="history" type="button"><span class="priority-time">02</span><span class="priority-copy"><strong>Strengthen discussion argument</strong><small>Revolutionary America · connected notes</small></span><span class="priority-arrow">→</span></button>`;
+  $("#homeHourlyTimeline").innerHTML = Array.from({ length: 13 }, (_, index) => index + 8).map(slotHour => {
+    const slotEvents = todayEvents.filter(event => Number(event.start.slice(0, 2)) === slotHour);
+    const hourLabel = `${slotHour % 12 || 12} ${slotHour >= 12 ? "PM" : "AM"}`;
+    return `<div class="hour-row ${slotHour === hour ? "current" : ""}"><time>${hourLabel}</time><div>${slotEvents.map(event => `<button data-home-event="${event.id}" type="button"><strong>${escapeHtml(event.title)}</strong><small>${formatTime(event.start)}–${formatTime(event.end)} · ${escapeHtml(event.source)}</small></button>`).join("") || `<span class="hour-open">Open</span>`}</div></div>`;
+  }).join("");
   $("#homeDayStatus").textContent = latestHealth.recovery < 65 ? "Recovery watch" : "Schedule aligned";
   $("#homeDayCount").textContent = String(todayEvents.length).padStart(2, "0");
-  $("#homeDayTitle").textContent = todayEvents.length ? `${todayEvents.length} commitments shape today.` : "Your day is open to shape.";
-  $("#homeDaySummary").textContent = nextEvent ? `Next signal: ${nextEvent.title} at ${nextEvent.start}. Recovery is ${latestHealth.recovery} out of 100.` : `No calendar blocks yet. Recovery is ${latestHealth.recovery} out of 100.`;
+  $("#homeDayTitle").textContent = todayEvents.length ? `${todayEvents.length} commitments · ${Math.round(scheduledMinutes / 6) / 10} hours scheduled` : "Your day is open to shape.";
+  $("#homeDaySummary").textContent = nextEvent ? `Next: ${nextEvent.title} at ${formatTime(nextEvent.start)}. Recovery score: ${latestHealth.recovery}/100.` : `No calendar blocks yet. Recovery score: ${latestHealth.recovery}/100.`;
+  $$('[data-home-period]').forEach(button => button.classList.toggle("active", button.dataset.homePeriod === homeDayPeriod));
+  $("#homeDayList").innerHTML = filteredDayEvents.map(event => `<button class="day-plan-event" data-home-event="${event.id}" type="button"><time>${formatTime(event.start)}</time><span><strong>${escapeHtml(event.title)}</strong><small>${escapeHtml(event.source)} · ${escapeHtml(event.zone)}</small></span><b>Open →</b></button>`).join("") || `<div class="day-plan-empty-state"><strong>No ${homeDayPeriod === "all" ? "" : `${homeDayPeriod} `}blocks yet.</strong><span>Use “Add block” to reserve time on your calendar.</span></div>`;
   renderHomeMailWidgets();
 
   $$('[data-home-event]').forEach(button => button.addEventListener("click", () => {
@@ -1372,7 +1349,11 @@ function setupEvents() {
   $("#editCourse").addEventListener("click", () => courseForm(state.courseId));
   $("#backToAcademic").addEventListener("click", () => switchView("academic"));
   $("#addSource").addEventListener("click", () => sourceForm());
-  $("#homeConnections").addEventListener("click", () => switchView("settings"));
+  $("#homeAddBlock").addEventListener("click", () => eventRecordForm(null, systemToday));
+  $$('[data-home-period]').forEach(button => button.addEventListener("click", () => {
+    homeDayPeriod = button.dataset.homePeriod;
+    renderHome();
+  }));
   ["themeAccent", "themePaper", "themeSidebar"].forEach(id => $("#" + id).addEventListener("input", updateCustomTheme));
   $("#resetTheme").addEventListener("click", () => {
     themePreferences = { ...themePresets.forest };
@@ -1404,8 +1385,6 @@ function init() {
   renderAcademicDashboard();
   renderConnections();
   renderHome();
-  updateHomeClock();
-  window.setInterval(updateHomeClock, 1000);
   const requestedView = location.hash.slice(1);
   refreshMailSuggestions();
   switchView(["academic", "networking", "calendar", "mail", "health", "capital", "settings"].includes(requestedView) ? requestedView : "home");

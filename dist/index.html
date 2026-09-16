@@ -116,22 +116,8 @@
         <div id="homeView" class="view active-view">
           <section class="home-welcome" aria-labelledby="homeTitle">
             <div>
-              <p class="eyebrow" id="homeDate">YOUR COMMAND CENTER</p>
+              <p class="eyebrow" id="homeDate"></p>
               <h1 id="homeTitle">Good morning, Blake.</h1>
-              <p>One clear view of academics, performance, relationships, and progress.</p>
-            </div>
-            <div class="home-clock" role="timer" aria-label="Current local time" aria-live="off">
-              <div class="home-clock-label">
-                <span class="home-clock-pulse" aria-hidden="true"></span>
-                Local time
-              </div>
-              <div class="home-clock-face">
-                <time id="homeClockTime" datetime="">00:00</time>
-                <span class="home-clock-detail">
-                  <span id="homeClockSeconds">00</span>
-                  <span id="homeClockPeriod">AM</span>
-                </span>
-              </div>
             </div>
           </section>
 
@@ -147,82 +133,43 @@
               <div class="priority-list" id="homePriorityList"></div>
             </article>
 
-            <article class="home-card home-academic-card">
+            <article class="home-card home-hourly-card">
               <div class="home-card-heading">
                 <div>
-                  <p class="kicker">ACADEMIC</p>
-                  <h2>Knowledge pulse</h2>
+                  <p class="kicker">TODAY'S CALENDAR</p>
+                  <h2>Hour by hour</h2>
                 </div>
-                <button class="text-button" data-home-target="academic" type="button">Open</button>
+                <button class="text-button" data-home-target="calendar" type="button">Open calendar</button>
               </div>
-              <div class="knowledge-score">
-                <div class="score-ring" id="homeScoreRing"><span id="homeLinkRate">0%</span></div>
-                <div><strong>Sources linked to thinking</strong><p id="homeAcademicSummary">Loading your workspace summary.</p></div>
-              </div>
-              <div class="mini-stat-row" id="homeAcademicStats"></div>
+              <div class="home-hourly-timeline" id="homeHourlyTimeline"></div>
             </article>
 
             <article class="home-card home-day-card">
               <div class="home-card-heading">
                 <div>
-                  <p class="kicker">DAY PLAN</p>
-                  <h2>Schedule signal</h2>
+                  <p class="kicker">DAY PLANNER</p>
+                  <h2>Shape the rest of today</h2>
                 </div>
-                <span class="home-status" id="homeDayStatus">Schedule aligned</span>
+                <div class="home-day-actions">
+                  <span class="home-status" id="homeDayStatus">Schedule aligned</span>
+                  <button class="button secondary compact" id="homeAddBlock" type="button">+ Add block</button>
+                </div>
               </div>
-              <div class="day-plan-empty">
+              <div class="day-plan-overview">
                 <div class="day-plan-icon" id="homeDayCount">00</div>
-                <div><strong id="homeDayTitle">Your day is open to shape.</strong><p id="homeDaySummary">Schedule and recovery signals will appear here.</p></div>
+                <div><strong id="homeDayTitle">Your day is open to shape.</strong><p id="homeDaySummary">Add a calendar block to give the day some structure.</p></div>
               </div>
-              <div class="time-zone-row"><span>Morning</span><span>Core hours</span><span>Recovery</span></div>
+              <div class="day-period-tabs" role="tablist" aria-label="Filter today's schedule">
+                <button class="active" data-home-period="all" type="button">All day</button>
+                <button data-home-period="morning" type="button">Morning</button>
+                <button data-home-period="afternoon" type="button">Afternoon</button>
+                <button data-home-period="evening" type="button">Evening</button>
+              </div>
+              <div class="day-plan-list" id="homeDayList"></div>
             </article>
           </section>
 
           <section class="home-mail-grid" id="homeMailIntelligence" aria-label="Mail intelligence"></section>
-
-          <section class="home-modules" aria-labelledby="systemOverviewTitle">
-            <div class="home-section-heading">
-              <div><p class="kicker">ALL SYSTEMS</p><h2 id="systemOverviewTitle">Your OS at a glance</h2></div>
-              <button class="text-button" id="homeConnections" type="button">Customize</button>
-            </div>
-            <div class="home-module-grid">
-              <button class="module-summary ready" data-home-target="academic" type="button">
-                <span class="module-icon academic">A</span>
-                <span class="module-copy"><strong>Academic</strong><small id="homeAcademicModule">Courses, notes, and sources</small></span>
-                <span class="module-state">Live</span>
-              </button>
-              <button class="module-summary ready" data-home-target="calendar" type="button">
-                <span class="module-icon calendar">C</span>
-                <span class="module-copy"><strong>Calendar</strong><small id="homeCalendarModule">Schedule and time blocks</small></span>
-                <span class="module-state">Live</span>
-              </button>
-              <button class="module-summary ready" data-home-target="mail" type="button">
-                <span class="module-icon mail">M</span>
-                <span class="module-copy"><strong>Mail</strong><small id="homeMailModule">AI inbox and calendar proposals</small></span>
-                <span class="module-state" id="homeMailState">Live</span>
-              </button>
-              <button class="module-summary ready" data-home-target="networking" type="button">
-                <span class="module-icon network">N</span>
-                <span class="module-copy"><strong>Networking</strong><small id="homeNetworkingModule">Contacts and follow ups</small></span>
-                <span class="module-state">Live</span>
-              </button>
-              <button class="module-summary ready" data-home-target="health" type="button">
-                <span class="module-icon health">H</span>
-                <span class="module-copy"><strong>Health</strong><small id="homeHealthModule">Recovery and performance</small></span>
-                <span class="module-state">Live</span>
-              </button>
-              <button class="module-summary ready" data-home-target="capital" type="button">
-                <span class="module-icon capital">$</span>
-                <span class="module-copy"><strong>Capital</strong><small id="homeCapitalModule">Budget and goals</small></span>
-                <span class="module-state">Live</span>
-              </button>
-              <button class="module-summary ready" data-home-target="academic" data-home-section="library" type="button">
-                <span class="module-icon research">R</span>
-                <span class="module-copy"><strong>Research library</strong><small id="homeLibraryModule">All source records</small></span>
-                <span class="module-state">Live</span>
-              </button>
-            </div>
-          </section>
         </div>
 
         <div id="academicView" class="view">

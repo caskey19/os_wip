@@ -559,11 +559,9 @@ a.nav-item {
 
 .home-welcome {
   display: flex;
-  min-height: 166px;
+  min-height: 136px;
   align-items: center;
-  justify-content: space-between;
-  gap: 28px;
-  padding: 34px 4px 27px;
+  padding: 28px 4px 22px;
 }
 
 .home-welcome h1 {
@@ -574,72 +572,9 @@ a.nav-item {
   letter-spacing: -0.035em;
 }
 
-.home-welcome > div > p:last-child {
-  margin: 0;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.home-clock {
-  min-width: 220px;
-  padding: 15px 18px 14px;
-  color: #edf3ef;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
-  background:
-    radial-gradient(circle at 86% 12%, rgba(var(--accent-rgb), 0.28), transparent 42%),
-    linear-gradient(145deg, var(--theme-deep-1), var(--theme-deep-2));
-  box-shadow: 0 16px 34px rgba(var(--sidebar-rgb), 0.18);
-}
-
-.home-clock-label {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin-bottom: 4px;
-  color: rgba(237, 243, 239, 0.62);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
-}
-
-.home-clock-pulse {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #b98c38;
-  box-shadow: 0 0 0 3px rgba(185, 140, 56, 0.14);
-}
-
-.home-clock-face {
-  display: flex;
-  align-items: flex-end;
-  gap: 9px;
-  font-variant-numeric: tabular-nums;
-}
-
-#homeClockTime {
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 35px;
-  line-height: 1;
-  letter-spacing: -0.035em;
-}
-
-.home-clock-detail {
-  display: grid;
-  gap: 2px;
-  padding-bottom: 2px;
-  color: rgba(237, 243, 239, 0.64);
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 1.05;
-  letter-spacing: 0.08em;
-}
-
 .home-command-grid {
   display: grid;
-  grid-template-columns: minmax(360px, 1.3fr) minmax(270px, 0.9fr) minmax(250px, 0.8fr);
+  grid-template-columns: minmax(360px, 1.15fr) minmax(330px, 0.85fr);
   gap: 12px;
 }
 
@@ -652,8 +587,13 @@ a.nav-item {
 }
 
 .home-card {
-  min-height: 270px;
+  min-height: 300px;
   padding: 21px;
+}
+
+.home-day-card {
+  grid-column: 1 / -1;
+  min-height: 0;
 }
 
 .home-focus-card {
@@ -862,11 +802,106 @@ a.nav-item {
   text-transform: uppercase;
 }
 
-.day-plan-empty {
+.home-hourly-card {
+  overflow: hidden;
+}
+
+.home-hourly-timeline {
+  max-height: 226px;
+  margin-top: 17px;
+  overflow-y: auto;
+  padding-right: 5px;
+}
+
+.hour-row {
+  display: grid;
+  grid-template-columns: 49px minmax(0, 1fr);
+  min-height: 34px;
+  border-top: 1px solid var(--line);
+}
+
+.hour-row:first-child {
+  border-top: 0;
+}
+
+.hour-row > time {
+  padding: 10px 8px 8px 0;
+  color: var(--subtle);
+  font-size: 8px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.hour-row > div {
+  min-width: 0;
+  padding: 4px 0 4px 10px;
+  border-left: 1px solid var(--line);
+}
+
+.hour-row.current > time {
+  color: var(--green);
+}
+
+.hour-row.current > div {
+  border-left-color: var(--green);
+}
+
+.hour-row button {
+  display: grid;
+  width: 100%;
+  gap: 2px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 7px;
+  color: var(--green-dark);
+  background: var(--green-soft);
+  cursor: pointer;
+  text-align: left;
+}
+
+.hour-row button:hover {
+  background: color-mix(in srgb, var(--green-soft) 70%, var(--green) 12%);
+}
+
+.hour-row button strong,
+.hour-row button small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hour-row button strong {
+  font-size: 9px;
+}
+
+.hour-row button small,
+.hour-open {
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.hour-open {
+  display: block;
+  padding: 7px 0;
+}
+
+.home-day-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.button.compact {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 8px;
+}
+
+.day-plan-overview {
   display: flex;
   align-items: flex-start;
   gap: 13px;
-  margin-top: 29px;
+  margin-top: 22px;
 }
 
 .day-plan-icon {
@@ -883,37 +918,118 @@ a.nav-item {
   font-size: 15px;
 }
 
-.day-plan-empty strong {
+.day-plan-overview strong {
   font-size: 10px;
 }
 
-.day-plan-empty p {
+.day-plan-overview p {
   margin: 5px 0 0;
   color: var(--muted);
   font-size: 9px;
   line-height: 1.5;
 }
 
-.time-zone-row {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 4px;
-  margin-top: 26px;
+.day-period-tabs {
+  display: flex;
+  gap: 6px;
+  margin-top: 19px;
+  overflow-x: auto;
 }
 
-.time-zone-row span {
-  padding: 8px 4px;
-  border-radius: 6px;
-  color: #77837b;
-  background: var(--surface-2);
-  font-size: 7px;
+.day-period-tabs button {
+  flex: 0 0 auto;
+  padding: 7px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.55);
+  font-size: 8px;
   font-weight: 700;
-  text-align: center;
+  cursor: pointer;
 }
 
-.time-zone-row span:nth-child(2) {
-  color: #f2f4ef;
+.day-period-tabs button.active {
+  color: white;
+  border-color: var(--green);
   background: var(--green);
+}
+
+.day-plan-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.day-plan-event {
+  display: grid;
+  grid-template-columns: 66px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.58);
+  cursor: pointer;
+  text-align: left;
+}
+
+.day-plan-event:hover {
+  border-color: color-mix(in srgb, var(--green) 32%, var(--line));
+  background: white;
+}
+
+.day-plan-event time {
+  color: var(--green-dark);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.day-plan-event span,
+.day-plan-event strong,
+.day-plan-event small {
+  min-width: 0;
+}
+
+.day-plan-event strong,
+.day-plan-event small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.day-plan-event strong {
+  font-size: 10px;
+}
+
+.day-plan-event small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.day-plan-event b {
+  color: var(--green);
+  font-size: 8px;
+}
+
+.day-plan-empty-state {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 4px;
+  padding: 17px;
+  border: 1px dashed var(--line);
+  border-radius: 9px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.day-plan-empty-state strong {
+  color: var(--ink);
+  font-size: 10px;
 }
 
 .home-modules {
@@ -2424,11 +2540,15 @@ a.nav-item {
   .topbar .button.secondary { display: none; }
   .topbar .button { min-height: 34px; padding: 0 11px; }
   .view { padding: 0 15px 30px; }
-  .home-welcome { align-items: flex-start; flex-direction: column; gap: 20px; padding: 29px 2px 23px; }
-  .home-clock { width: 100%; min-width: 0; }
+  .home-welcome { min-height: 118px; align-items: flex-start; padding: 25px 2px 18px; }
   .home-command-grid { grid-template-columns: 1fr; }
   .home-day-card { grid-column: auto; }
   .home-card { min-height: 0; padding: 18px; }
+  .home-day-card .home-card-heading { align-items: flex-start; }
+  .home-day-actions { align-items: flex-end; flex-direction: column; }
+  .day-plan-list { grid-template-columns: 1fr; }
+  .day-plan-event { grid-template-columns: 60px minmax(0, 1fr); }
+  .day-plan-event b { display: none; }
   .home-module-grid { grid-template-columns: 1fr; }
   .home-modules { padding: 18px; }
   .home-section-heading { align-items: flex-start; }
@@ -2642,7 +2762,8 @@ a.nav-item {
 .mail-card-top > span { color: rgba(255,255,255,.55); font-size: 9px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
 .urgent-card .mail-card-top > span { color: inherit; }
 .mail-summary-card .kicker { color: #a8c5b5; }
-.mail-summary-copy { position: relative; z-index: 1; max-width: 740px; margin: 29px 0 25px; color: #f3f6f4; font: 400 17px/1.65 Georgia, serif; }
+.mail-summary-bullets { position: relative; z-index: 1; display: grid; max-width: 760px; gap: 11px; margin: 25px 0 24px; padding-left: 20px; color: #f3f6f4; font: 400 15px/1.5 Georgia, serif; }
+.mail-summary-bullets li::marker { color: #9fc3ad; }
 .mail-summary-stats { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: 8px; }
 .mail-summary-stats span { display: flex; align-items: center; gap: 6px; padding: 7px 9px; border: 1px solid rgba(255,255,255,.1); border-radius: 999px; background: rgba(255,255,255,.06); color: rgba(255,255,255,.72); font-size: 9px; }
 .mail-summary-stats strong { color: #fff; font-size: 11px; }
