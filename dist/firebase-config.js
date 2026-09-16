@@ -5,10 +5,10 @@
  */
 window.ACADEMIC_OS_CONFIG = {
   firebase: {
-    apiKey: "",
-    authDomain: "",
-    projectId: "",
-    appId: ""
+    apiKey: "AIzaSyDgwG8Ee6cLSx3f09UoC2QFpiPu2aMVwgk",
+    authDomain: "studentathleteos.firebaseapp.com",
+    projectId: "studentathleteos",
+    appId: "1:617863249074:web:95a733b8c3b80d4dfa1dab"
   },
   // HTTPS Firebase Function (or equivalent authenticated proxy) accepting
   // { task: "triage" | "draft", messages?, message?, preferences? }.
