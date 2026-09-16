@@ -147,6 +147,10 @@
               <p class="eyebrow" id="homeDate"></p>
               <h1 id="homeTitle">Good morning.</h1>
             </div>
+            <div class="home-clock" aria-label="Current local time">
+              <span>Local time</span>
+              <strong id="homeClock">--:--</strong>
+            </div>
           </section>
 
           <section class="home-command-grid" aria-label="Today overview">
@@ -175,25 +179,19 @@
             <article class="home-card home-day-card">
               <div class="home-card-heading">
                 <div>
-                  <p class="kicker">DAY PLANNER</p>
-                  <h2>Shape the rest of today</h2>
+                  <p class="kicker">HEALTH OVERVIEW</p>
+                  <h2>Read your readiness</h2>
                 </div>
                 <div class="home-day-actions">
-                  <span class="home-status" id="homeDayStatus">Schedule aligned</span>
-                  <button class="button secondary compact" id="homeAddBlock" type="button">+ Add block</button>
+                  <span class="home-status" id="homeDayStatus">Recovery check</span>
+                  <button class="button secondary compact" data-home-target="health" type="button">Open health</button>
                 </div>
               </div>
-              <div class="day-plan-overview">
-                <div class="day-plan-icon" id="homeDayCount">00</div>
-                <div><strong id="homeDayTitle">Your day is open to shape.</strong><p id="homeDaySummary">Add a calendar block to give the day some structure.</p></div>
+              <div class="home-health-layout">
+                <div class="health-score-wrap"><div class="home-health-ring" id="homeHealthRing"><strong id="homeDayCount">00</strong><span>recovery</span></div><p id="homeDaySummary">Your latest readiness snapshot.</p></div>
+                <div class="health-mini-chart" aria-label="Recent recovery trend"><div class="health-chart-label"><span>7-day recovery</span><strong id="homeHealthTrend">Steady</strong></div><svg id="homeHealthChart" viewBox="0 0 300 92" preserveAspectRatio="none" role="img" aria-label="Recovery trend chart"></svg></div>
+                <ul class="home-health-bullets" id="homeHealthBullets"></ul>
               </div>
-              <div class="day-period-tabs" role="tablist" aria-label="Filter today's schedule">
-                <button class="active" data-home-period="all" type="button">All day</button>
-                <button data-home-period="morning" type="button">Morning</button>
-                <button data-home-period="afternoon" type="button">Afternoon</button>
-                <button data-home-period="evening" type="button">Evening</button>
-              </div>
-              <div class="day-plan-list" id="homeDayList"></div>
             </article>
           </section>
 

@@ -418,23 +418,57 @@ async function initializeAetherAuth() {
   });
 }
 
+let homeCapitalSlide = 0;
+let homeCapitalSearch = "";
+
+const homeCapitalStocks = {
+  AAPL: { name: "Apple", price: "214.38", change: "+1.24%", allocation: "18.6%", thesis: "Services momentum and a durable device ecosystem.", news: "Services revenue remains the key margin signal this quarter." },
+  MSFT: { name: "Microsoft", price: "486.72", change: "+0.68%", allocation: "14.2%", thesis: "Cloud demand and AI infrastructure expansion.", news: "Azure growth and AI spending remain the next reporting focus." },
+  NVDA: { name: "NVIDIA", price: "174.66", change: "+2.10%", allocation: "9.8%", thesis: "Compute demand remains the central growth catalyst.", news: "Data-center demand is the headline to watch this week." },
+  VTI: { name: "Vanguard Total Stock Market ETF", price: "311.42", change: "+0.35%", allocation: "32.4%", thesis: "Broad-market core holding for long-term diversification.", news: "Market breadth and rate expectations are the current macro drivers." }
+};
+
 function renderHomeMailWidgets() {
   const root = $("#homeMailIntelligence");
   if (!root) return;
   const messages = systemData.mail.messages;
   const urgent = messages.filter(message => message.urgency === "urgent");
-  const unread = messages.filter(message => message.unread).length;
-  const deadlines = messages.filter(message => message.category === "Deadlines").length;
-  const networking = messages.filter(message => message.category === "Networking").length;
-  const summaryBullets = [
-    `${unread} unread across ${messages.length} recent messages.`,
-    urgent.length ? `${urgent.length} need timely attention, led by “${urgent[0].subject}.”` : "Nothing needs urgent attention.",
-    `${deadlines} deadline-related and ${networking} networking message${networking === 1 ? "" : "s"} grouped for faster review.`
+  const watchlist = Array.isArray(systemData.capitalWatchlist) ? systemData.capitalWatchlist : ["AAPL", "MSFT", "NVDA"];
+  const requestedSymbol = homeCapitalSearch.trim().toUpperCase();
+  const searchResult = homeCapitalStocks[requestedSymbol];
+  const slides = [
+    { key: "portfolio", label: "Portfolio", title: "Your capital, at a glance" },
+    { key: "AAPL", label: "Apple", title: "Apple · AAPL" },
+    { key: "watchlist", label: "Watchlist", title: "Watchlist" }
   ];
-  root.innerHTML = `<article class="mail-summary-card home-mail-summary"><div class="mail-card-top"><div><p class="kicker">AI DAILY SUMMARY</p><h2>Your inbox, distilled</h2></div><span>${systemData.mail.connection.lastSync ? `Updated ${mailTime(systemData.mail.connection.lastSync)}` : "Morning brief"}</span></div><ul class="mail-summary-bullets">${summaryBullets.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul><div class="mail-summary-stats">${mailCategories.map(category => `<span><strong>${messages.filter(message => message.category === category).length}</strong>${category}</span>`).join("")}</div></article><article class="urgent-card home-urgent-card"><div class="mail-card-top"><div><p class="kicker">URGENT ACTIONS</p><h2>Needs your attention</h2></div><span class="urgent-count">${urgent.length}</span></div><div class="urgent-list">${urgent.slice(0, 4).map(message => `<button data-home-mail-message="${message.id}" type="button"><span class="urgency-dot"></span><span><strong>${escapeHtml(message.subject)}</strong><small>${escapeHtml(senderName(message.sender))} · ${mailTime(message.receivedAt)}</small></span><b>→</b></button>`).join("") || `<div class="empty-list">No urgent requests detected.</div>`}</div></article>`;
+  const activeSlide = slides[homeCapitalSlide] || slides[0];
+  const stockCard = stock => `<div class="capital-stock-detail"><div><span class="capital-symbol">${stock.symbol}</span><h3>${escapeHtml(stock.name)}</h3><p>${escapeHtml(stock.thesis)}</p></div><div class="capital-price"><strong>$${stock.price}</strong><span>${stock.change} today</span></div><div class="capital-news"><b>Relevant news</b><p>${escapeHtml(stock.news)}</p></div></div>`;
+  const apple = { symbol: "AAPL", ...homeCapitalStocks.AAPL };
+  const queried = searchResult ? { symbol: requestedSymbol, ...searchResult } : null;
+  const slideContent = activeSlide.key === "portfolio"
+    ? `<div class="capital-portfolio"><div><p class="capital-total">$48,620.14</p><span class="capital-positive">+$642.80 · 1.34% today</span></div><div class="capital-allocation"><span style="--allocation:32%">VTI</span><span style="--allocation:19%">AAPL</span><span style="--allocation:14%">MSFT</span><span style="--allocation:10%">NVDA</span><i></i></div><ul><li>Long-term allocation remains balanced.</li><li>Largest position: VTI at 32.4%.</li><li>Cash available to invest: $3,180.</li></ul></div>`
+    : activeSlide.key === "watchlist"
+      ? `<div class="capital-watchlist">${watchlist.map(symbol => { const stock = homeCapitalStocks[symbol]; return stock ? `<button class="watchlist-row" data-capital-stock="${symbol}" type="button"><span><b>${symbol}</b><small>${escapeHtml(stock.name)}</small></span><strong>${stock.change}</strong><i>→</i></button>` : ""; }).join("") || `<p class="capital-empty">Search for a ticker and add it here.</p>`}</div>`
+      : stockCard(apple);
+  root.innerHTML = `<article class="mail-summary-card home-mail-summary capital-home-card"><div class="mail-card-top"><div><p class="kicker">CAPITAL TRACKER</p><h2>${activeSlide.title}</h2></div><label class="capital-search"><span aria-hidden="true">⌕</span><input data-capital-search type="search" value="${escapeHtml(homeCapitalSearch)}" placeholder="Search ticker" aria-label="Search stocks"></label></div>${queried ? `<div class="capital-search-result">${stockCard(queried)}<button class="capital-watch-button" data-add-watch="${requestedSymbol}" type="button">+ Add ${requestedSymbol} to watchlist</button></div>` : `<div class="capital-slide">${slideContent}</div>`}<div class="capital-controls"><button class="capital-arrow" data-capital-prev type="button" aria-label="Previous capital slide">←</button><span>${slides.map((slide, index) => `<button class="capital-dot ${index === homeCapitalSlide ? "active" : ""}" data-capital-slide="${index}" type="button" aria-label="Show ${slide.label}"></button>`).join("")}</span><button class="capital-arrow" data-capital-next type="button" aria-label="Next capital slide">→</button><button class="capital-watch-button" data-add-watch="${activeSlide.key === "AAPL" ? "AAPL" : "NVDA"}" type="button">+ Add to watchlist</button></div><small class="capital-disclaimer">Sample market data · account integrations coming soon</small></article><article class="urgent-card home-urgent-card"><div class="mail-card-top"><div><p class="kicker">URGENT ACTIONS</p><h2>Needs your attention</h2></div><span class="urgent-count">${urgent.length}</span></div><div class="urgent-list">${urgent.slice(0, 4).map(message => `<button data-home-mail-message="${message.id}" type="button"><span class="urgency-dot"></span><span><strong>${escapeHtml(message.subject)}</strong><small>${escapeHtml(senderName(message.sender))} · ${mailTime(message.receivedAt)}</small></span><b>→</b></button>`).join("") || `<div class="empty-list">No urgent requests detected.</div>`}</div></article>`;
   root.querySelectorAll("[data-home-mail-message]").forEach(button => button.addEventListener("click", () => {
     mailSelectedId = button.dataset.homeMailMessage;
     switchView("mail");
+  }));
+  root.querySelector("[data-capital-prev]")?.addEventListener("click", () => { homeCapitalSearch = ""; homeCapitalSlide = (homeCapitalSlide + slides.length - 1) % slides.length; renderHomeMailWidgets(); });
+  root.querySelector("[data-capital-next]")?.addEventListener("click", () => { homeCapitalSearch = ""; homeCapitalSlide = (homeCapitalSlide + 1) % slides.length; renderHomeMailWidgets(); });
+  root.querySelectorAll("[data-capital-slide]").forEach(button => button.addEventListener("click", () => { homeCapitalSearch = ""; homeCapitalSlide = Number(button.dataset.capitalSlide); renderHomeMailWidgets(); }));
+  root.querySelectorAll("[data-capital-stock]").forEach(button => button.addEventListener("click", () => { homeCapitalSearch = button.dataset.capitalStock; renderHomeMailWidgets(); }));
+  root.querySelector("[data-capital-search]")?.addEventListener("input", event => { homeCapitalSearch = event.target.value; renderHomeMailWidgets(); });
+  root.querySelectorAll("[data-add-watch]").forEach(button => button.addEventListener("click", () => {
+    const symbol = button.dataset.addWatch;
+    if (!homeCapitalStocks[symbol]) return;
+    if (!Array.isArray(systemData.capitalWatchlist)) systemData.capitalWatchlist = ["AAPL", "MSFT", "NVDA"];
+    if (systemData.capitalWatchlist.includes(symbol)) { showToast(`${symbol} is already on your watchlist.`); return; }
+    systemData.capitalWatchlist.push(symbol);
+    saveSystemData();
+    showToast(`${symbol} added to your watchlist.`);
+    renderHomeMailWidgets();
   }));
 }
 

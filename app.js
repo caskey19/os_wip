@@ -1130,22 +1130,14 @@ function renderHome() {
   const todayEvents = systemData.events.filter(event => event.date === systemToday).sort((a, b) => a.start.localeCompare(b.start));
   const nextEvent = todayEvents.find(event => event.end >= now.toTimeString().slice(0, 5)) || todayEvents[0];
   const latestHealth = systemData.health[0] || { recovery: 0, sleep: 0, workout: "No performance log" };
-  const toMinutes = value => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
   const formatTime = value => {
     const [hours, minutes] = value.split(":").map(Number);
     return `${hours % 12 || 12}${minutes ? `:${String(minutes).padStart(2, "0")}` : ""} ${hours >= 12 ? "PM" : "AM"}`;
   };
-  const scheduledMinutes = todayEvents.reduce((total, event) => total + Math.max(0, toMinutes(event.end) - toMinutes(event.start)), 0);
-  const filteredDayEvents = todayEvents.filter(event => {
-    const startHour = Number(event.start.slice(0, 2));
-    if (homeDayPeriod === "morning") return startHour < 12;
-    if (homeDayPeriod === "afternoon") return startHour >= 12 && startHour < 17;
-    if (homeDayPeriod === "evening") return startHour >= 17;
-    return true;
-  });
 
   $("#homeDate").textContent = dateLabel;
   $("#homeTitle").textContent = `${greeting}, ${window.AetherCurrentUserName || "Blake"}.`;
+  updateHomeClock(now);
   $("#homeFocusStatus").innerHTML = `<i></i>${todayEvents.length ? `${todayEvents.length} scheduled` : "Focused"}`;
   $("#homePriorityList").innerHTML = todayEvents.length ? todayEvents.slice(0, 3).map((event, index) => `
     <button class="priority-item" data-home-event="${event.id}" type="button">
@@ -1161,12 +1153,21 @@ function renderHome() {
     const hourLabel = `${slotHour % 12 || 12} ${slotHour >= 12 ? "PM" : "AM"}`;
     return `<div class="hour-row ${slotHour === hour ? "current" : ""}"><time>${hourLabel}</time><div>${slotEvents.map(event => `<button data-home-event="${event.id}" type="button"><strong>${escapeHtml(event.title)}</strong><small>${formatTime(event.start)}–${formatTime(event.end)} · ${escapeHtml(event.source)}</small></button>`).join("") || `<span class="hour-open">Open</span>`}</div></div>`;
   }).join("");
-  $("#homeDayStatus").textContent = latestHealth.recovery < 65 ? "Recovery watch" : "Schedule aligned";
-  $("#homeDayCount").textContent = String(todayEvents.length).padStart(2, "0");
-  $("#homeDayTitle").textContent = todayEvents.length ? `${todayEvents.length} commitments · ${Math.round(scheduledMinutes / 6) / 10} hours scheduled` : "Your day is open to shape.";
-  $("#homeDaySummary").textContent = nextEvent ? `Next: ${nextEvent.title} at ${formatTime(nextEvent.start)}. Recovery score: ${latestHealth.recovery}/100.` : `No calendar blocks yet. Recovery score: ${latestHealth.recovery}/100.`;
-  $$('[data-home-period]').forEach(button => button.classList.toggle("active", button.dataset.homePeriod === homeDayPeriod));
-  $("#homeDayList").innerHTML = filteredDayEvents.map(event => `<button class="day-plan-event" data-home-event="${event.id}" type="button"><time>${formatTime(event.start)}</time><span><strong>${escapeHtml(event.title)}</strong><small>${escapeHtml(event.source)} · ${escapeHtml(event.zone)}</small></span><b>Open →</b></button>`).join("") || `<div class="day-plan-empty-state"><strong>No ${homeDayPeriod === "all" ? "" : `${homeDayPeriod} `}blocks yet.</strong><span>Use “Add block” to reserve time on your calendar.</span></div>`;
+  const healthHistory = systemData.health.slice(0, 7).reverse();
+  const recoveryPoints = (healthHistory.length ? healthHistory.map(item => item.recovery) : [0]);
+  const chartValues = recoveryPoints.length >= 7 ? recoveryPoints : [78, 72, 79, 84, ...recoveryPoints].slice(-7);
+  const xStep = 300 / Math.max(chartValues.length - 1, 1);
+  const points = chartValues.map((value, index) => `${index * xStep},${86 - (Math.max(0, Math.min(100, value)) * .68)}`).join(" ");
+  const areaPoints = `0,92 ${points} 300,92`;
+  const averageRecovery = Math.round(chartValues.reduce((sum, value) => sum + value, 0) / chartValues.length);
+  const trend = latestHealth.recovery >= averageRecovery ? "Above baseline" : "Take it easier";
+  $("#homeDayStatus").textContent = latestHealth.recovery < 65 ? "Recovery watch" : "Ready to train";
+  $("#homeDayCount").textContent = latestHealth.recovery;
+  $("#homeDaySummary").textContent = latestHealth.recovery < 65 ? "Protect recovery with a lighter session and a reset window." : "You are in range for your planned training load.";
+  $("#homeHealthTrend").textContent = trend;
+  $("#homeHealthRing").style.setProperty("--recovery", latestHealth.recovery);
+  $("#homeHealthChart").innerHTML = `<defs><linearGradient id="healthArea" x1="0" x2="0" y1="0" y2="1"><stop stop-color="rgba(49,94,75,.26)"/><stop offset="1" stop-color="rgba(49,94,75,0)"/></linearGradient></defs><polygon points="${areaPoints}" fill="url(#healthArea)"></polygon><polyline points="${points}" fill="none" stroke="var(--green)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></polyline>${chartValues.map((value, index) => `<circle cx="${index * xStep}" cy="${86 - (Math.max(0, Math.min(100, value)) * .68)}" r="3" fill="var(--paper)" stroke="var(--green)" stroke-width="2"></circle>`).join("")}`;
+  $("#homeHealthBullets").innerHTML = [`${latestHealth.sleep || 0} hours of sleep last night`, `Training load: ${latestHealth.load || 0} · exertion ${latestHealth.exertion || 0}/10`, `Resting heart rate: ${latestHealth.hr || "—"} bpm`].map(item => `<li>${escapeHtml(item)}</li>`).join("");
   renderHomeMailWidgets();
 
   $$('[data-home-event]').forEach(button => button.addEventListener("click", () => {
@@ -1174,6 +1175,12 @@ function renderHome() {
     eventRecordForm(button.dataset.homeEvent);
   }));
   $$('[data-home-course]').forEach(button => button.addEventListener("click", () => selectCourse(button.dataset.homeCourse)));
+}
+
+function updateHomeClock(now = new Date()) {
+  const target = $("#homeClock");
+  if (!target) return;
+  target.textContent = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
 function switchView(view) {
@@ -1405,11 +1412,6 @@ function setupEvents() {
   $("#editCourse").addEventListener("click", () => courseForm(state.courseId));
   $("#backToAcademic").addEventListener("click", () => switchView("academic"));
   $("#addSource").addEventListener("click", () => sourceForm());
-  $("#homeAddBlock").addEventListener("click", () => eventRecordForm(null, systemToday));
-  $$('[data-home-period]').forEach(button => button.addEventListener("click", () => {
-    homeDayPeriod = button.dataset.homePeriod;
-    renderHome();
-  }));
   ["themeAccent", "themePaper", "themeSidebar"].forEach(id => $("#" + id).addEventListener("input", updateCustomTheme));
   $("#resetTheme").addEventListener("click", () => {
     themePreferences = { ...themePresets.forest };
@@ -1438,6 +1440,9 @@ function init() {
   renderAcademicDashboard();
   renderConnections();
   renderHome();
+  setInterval(() => {
+    if (state.view === "home") updateHomeClock();
+  }, 1000);
   const requestedView = location.hash.slice(1);
   refreshMailSuggestions();
   switchView(["academic", "networking", "calendar", "mail", "health", "capital", "settings"].includes(requestedView) ? requestedView : "home");
