@@ -696,7 +696,7 @@ function renderCalendarDashboard() {
   const dayEvents = systemData.events.filter(event => event.date === systemCalendarDate).sort((a, b) => a.start.localeCompare(b.start));
   const pendingMail = systemData.mailSuggestions.filter(item => item.status === "pending");
   const mailAutomation = `<section class="calendar-mail-automation"><div class="calendar-automation-heading"><div><span class="mail-spark">✦</span><div><p class="kicker">MAIL → CALENDAR</p><h2>${pendingMail.length ? `${pendingMail.length} event${pendingMail.length === 1 ? "" : "s"} ready for review` : "Inbox events are up to date"}</h2><p>${systemData.mail.preferences.calendarMode === "auto" ? "New event details are added automatically and remain editable." : "Review parsed details before anything is written to your calendar."}</p></div></div><div class="automation-mode" role="group" aria-label="Mail calendar automation"><button class="${systemData.mail.preferences.calendarMode === "semi" ? "active" : ""}" data-mail-calendar-mode="semi" type="button">Ask first</button><button class="${systemData.mail.preferences.calendarMode === "auto" ? "active" : ""}" data-mail-calendar-mode="auto" type="button">Automatic</button></div></div>${pendingMail.length ? `<div class="calendar-proposal-list">${pendingMail.map(item => `<article><div class="proposal-date"><strong>${Number(item.date.slice(-2))}</strong><span>${new Date(`${item.date}T12:00:00`).toLocaleDateString("en-US", { month: "short" }).toUpperCase()}</span></div><div class="proposal-copy"><span><em>${item.confidence}% confident</em><i>${escapeHtml(item.priority)} priority</i></span><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.start)}–${escapeHtml(item.end)} · from ${escapeHtml(senderName(item.sender))}</p></div><div class="proposal-actions"><button class="button secondary" data-edit-mail-proposal="${item.id}" type="button">Edit</button><button class="text-button proposal-dismiss" data-dismiss-mail-proposal="${item.id}" type="button">Dismiss</button><button class="button primary" data-approve-mail-proposal="${item.id}" type="button">Add to Calendar</button></div></article>`).join("")}</div>` : ""}</section>`;
-  root.innerHTML = systemHeader("COMMAND YOUR TIME", "Calendar", "One editable schedule assembled from academics, athletics, mail, health, and relationships.", [[visible.length, "IN VIEW"], [systemData.events.filter(event => event.priority === "high").length, "HIGH PRIORITY"], [5, "SYNC SOURCES"]]) + mailAutomation + `<section class="collection-panel calendar-shell"><div class="calendar-toolbar"><div><p class="kicker">${systemCalendarView === "month" ? new Date(`${systemCalendarDate}T12:00:00`).toLocaleDateString("en-US", { month: "long", year: "numeric" }).toUpperCase() : `${niceSystemDate(range[0])}${range.length > 1 ? ` — ${niceSystemDate(range.at(-1))}` : ""}`}</p><h2>Your schedule</h2></div><div class="calendar-controls"><button class="button secondary" data-calendar-step="-1" type="button">‹</button><button class="button secondary" data-calendar-today type="button">Today</button><button class="button secondary" data-calendar-step="1" type="button">›</button><div class="segmented">${[["day", "1-Day"], ["3day", "3-Day"], ["week", "Week"], ["month", "Month"]].map(([value, label]) => `<button class="segment ${systemCalendarView === value ? "active" : ""}" data-calendar-view="${value}" type="button">${label}</button>`).join("")}</div></div></div><div class="calendar-content">${surface}<aside class="daily-brief"><p class="kicker">DAILY BRIEF · ${niceSystemDate(systemCalendarDate)}</p><h2>${dayEvents.length ? "Your commitments at a glance" : "A clear day to shape"}</h2><p>${dayEvents.length} commitments · ${dayEvents.filter(event => event.priority === "high").length} high priority</p>${dayEvents.slice(0, 4).map(event => `<button data-calendar-event="${event.id}" type="button"><strong>${escapeHtml(event.title)}</strong><span>${escapeHtml(event.start)} · ${escapeHtml(event.zone)}</span></button>`).join("") || "<div class='empty-list'>No events scheduled.</div>"}</aside></div></section>`;
+  root.innerHTML = systemHeader("COMMAND YOUR TIME", "Calendar", "One editable schedule assembled from Google Calendar, academics, athletics, mail, health, and relationships.", [[visible.length, "IN VIEW"], [systemData.events.filter(event => event.priority === "high").length, "HIGH PRIORITY"], [6, "SYNC SOURCES"]]) + mailAutomation + `<section class="collection-panel calendar-shell"><div class="calendar-toolbar"><div><p class="kicker">${systemCalendarView === "month" ? new Date(`${systemCalendarDate}T12:00:00`).toLocaleDateString("en-US", { month: "long", year: "numeric" }).toUpperCase() : `${niceSystemDate(range[0])}${range.length > 1 ? ` — ${niceSystemDate(range.at(-1))}` : ""}`}</p><h2>Your schedule</h2></div><div class="calendar-controls"><button class="button secondary" data-calendar-step="-1" type="button">‹</button><button class="button secondary" data-calendar-today type="button">Today</button><button class="button secondary" data-calendar-step="1" type="button">›</button><div class="segmented">${[["day", "1-Day"], ["3day", "3-Day"], ["week", "Week"], ["month", "Month"]].map(([value, label]) => `<button class="segment ${systemCalendarView === value ? "active" : ""}" data-calendar-view="${value}" type="button">${label}</button>`).join("")}</div></div></div><div class="calendar-content">${surface}<aside class="daily-brief"><p class="kicker">DAILY BRIEF · ${niceSystemDate(systemCalendarDate)}</p><h2>${dayEvents.length ? "Your commitments at a glance" : "A clear day to shape"}</h2><p>${dayEvents.length} commitments · ${dayEvents.filter(event => event.priority === "high").length} high priority</p>${dayEvents.slice(0, 4).map(event => `<button data-calendar-event="${event.id}" type="button"><strong>${escapeHtml(event.title)}</strong><span>${escapeHtml(event.start)} · ${escapeHtml(event.zone)}</span></button>`).join("") || "<div class='empty-list'>No events scheduled.</div>"}</aside></div></section>`;
   root.querySelectorAll("[data-calendar-view]").forEach(button => button.addEventListener("click", () => { systemCalendarView = button.dataset.calendarView; renderCalendarDashboard(); }));
   root.querySelectorAll("[data-calendar-step]").forEach(button => button.addEventListener("click", () => { const date = new Date(`${systemCalendarDate}T12:00:00`), direction = Number(button.dataset.calendarStep); if (systemCalendarView === "month") date.setMonth(date.getMonth() + direction); else date.setDate(date.getDate() + direction * (systemCalendarView === "week" ? 7 : systemCalendarView === "3day" ? 3 : 1)); systemCalendarDate = date.toISOString().slice(0, 10); renderCalendarDashboard(); }));
   root.querySelector("[data-calendar-today]").addEventListener("click", () => { systemCalendarDate = systemToday; renderCalendarDashboard(); });
@@ -718,7 +718,7 @@ function renderCalendarDashboard() {
 
 function eventRecordForm(id = null, date = systemCalendarDate) {
   const event = systemData.events.find(item => item.id === id) || { title: "", date, start: "09:00", end: "10:00", source: "Manual", priority: "medium", zone: "Flexible", notes: "" };
-  openAcademicForm(id ? "Edit event" : "Add event", "CALENDAR RECORD", `<label>Title<input name="title" required value="${escapeHtml(event.title)}"></label><div class="form-row"><label>Date<input name="date" type="date" required value="${event.date}"></label><label>Source<select name="source">${["Manual", "Academic", "Athletics", "Mail", "Health", "Networking"].map(value => `<option ${event.source === value ? "selected" : ""}>${value}</option>`).join("")}</select></label></div><div class="form-row"><label>Starts<input name="start" type="time" required value="${event.start}"></label><label>Ends<input name="end" type="time" required value="${event.end}"></label></div><div class="form-row"><label>Priority<select name="priority">${["high", "medium", "low"].map(value => `<option ${event.priority === value ? "selected" : ""}>${value}</option>`).join("")}</select></label><label>Time-block zone<select name="zone">${["Deep work", "Training", "Relationships", "Recovery", "Flexible"].map(value => `<option ${event.zone === value ? "selected" : ""}>${value}</option>`).join("")}</select></label></div><label>Notes<textarea name="notes" rows="4">${escapeHtml(event.notes)}</textarea></label>`, data => {
+  openAcademicForm(id ? "Edit event" : "Add event", "CALENDAR RECORD", `<label>Title<input name="title" required value="${escapeHtml(event.title)}"></label><div class="form-row"><label>Date<input name="date" type="date" required value="${event.date}"></label><label>Source<select name="source">${["Manual", "Google", "Academic", "Athletics", "Mail", "Health", "Networking"].map(value => `<option ${event.source === value ? "selected" : ""}>${value}</option>`).join("")}</select></label></div><div class="form-row"><label>Starts<input name="start" type="time" required value="${event.start}"></label><label>Ends<input name="end" type="time" required value="${event.end}"></label></div><div class="form-row"><label>Priority<select name="priority">${["high", "medium", "low"].map(value => `<option ${event.priority === value ? "selected" : ""}>${value}</option>`).join("")}</select></label><label>Time-block zone<select name="zone">${["Deep work", "Training", "Relationships", "Recovery", "Flexible"].map(value => `<option ${event.zone === value ? "selected" : ""}>${value}</option>`).join("")}</select></label></div><label>Notes<textarea name="notes" rows="4">${escapeHtml(event.notes)}</textarea></label>`, data => {
     if (data.get("end") <= data.get("start")) { showToast("End time must be after start time."); return false; }
     const record = { id: id || systemId("e"), title: data.get("title").trim(), date: data.get("date"), start: data.get("start"), end: data.get("end"), source: data.get("source"), priority: data.get("priority"), zone: data.get("zone"), notes: data.get("notes").trim() };
     if (id) Object.assign(event, record); else systemData.events.push(record);
@@ -1085,6 +1085,7 @@ function renderHome() {
   $("#homeDayCount").textContent = String(todayEvents.length).padStart(2, "0");
   $("#homeDayTitle").textContent = todayEvents.length ? `${todayEvents.length} commitments shape today.` : "Your day is open to shape.";
   $("#homeDaySummary").textContent = nextEvent ? `Next signal: ${nextEvent.title} at ${nextEvent.start}. Recovery is ${latestHealth.recovery} out of 100.` : `No calendar blocks yet. Recovery is ${latestHealth.recovery} out of 100.`;
+  renderHomeMailWidgets();
 
   $$('[data-home-event]').forEach(button => button.addEventListener("click", () => {
     switchView("calendar");
@@ -1114,9 +1115,9 @@ function switchView(view) {
   const [root, detail] = breadcrumbs[view];
   $("#breadcrumbRoot").textContent = root;
   $("#breadcrumbCourse").textContent = detail;
-  const primaryLabels = { home: "Quick capture", networking: "Add contact", calendar: "Add event", mail: systemData.mail.connection.connected ? "Sync inbox" : "Connect Google", health: "Log metrics", capital: "Add transaction" };
+  const primaryLabels = { home: "Quick capture", networking: "Add contact", calendar: "Add event", health: "Log metrics", capital: "Add transaction" };
   $("#openCapture").innerHTML = `<span aria-hidden="true">+</span> ${primaryLabels[view] || "New note"}`;
-  $(".topbar-actions").classList.toggle("home-hidden", view === "home");
+  $(".topbar-actions").classList.toggle("home-hidden", view === "home" || view === "mail");
   renderCourseNav();
   if (view === "home") renderHome();
   if (view === "academic") renderAcademicDashboard();
@@ -1164,7 +1165,15 @@ function renderLibrary() {
 }
 
 function renderConnections() {
-  $("#connectionGrid").innerHTML = integrations.map(item => `
+  const googleConnected = systemData.mail.connection.connected;
+  $("#connectionGrid").innerHTML = integrations.map(item => {
+    const isGoogle = item.name === "Google Mail & Calendar";
+    const action = isGoogle
+      ? googleConnected
+        ? `<span class="status-pill">Connected</span>`
+        : `<button class="button secondary" data-google-connect type="button">Connect Google</button>`
+      : `<span class="status-pill">Not connected</span>`;
+    return `
     <article class="connection-card">
       <div class="connection-logo" style="background:${item.color}">${item.short}</div>
       <div>
@@ -1172,9 +1181,10 @@ function renderConnections() {
         <p>${escapeHtml(item.description)}</p>
         <span class="connection-map">${escapeHtml(item.map)}</span>
       </div>
-      <span class="status-pill">Not connected</span>
+      ${action}
     </article>
-  `).join("");
+  `; }).join("");
+  $("[data-google-connect]")?.addEventListener("click", connectMail);
 }
 
 function setupLibraryControls() {

@@ -191,7 +191,7 @@ function useMailDefaults() {
 async function connectMail() {
   if (!window.AcademicOSMail) return showToast("Mail services are still loading. Try again in a moment.");
   if (!window.AcademicOSMail.isConfigured()) return showToast("Add your Firebase web configuration to enable live Gmail.");
-  const button = $("[data-mail-connect]");
+  const button = $("[data-google-connect]");
   if (button) { button.disabled = true; button.textContent = "Connecting…"; }
   try {
     const user = await window.AcademicOSMail.connect();
@@ -199,39 +199,143 @@ async function connectMail() {
     const savedPreferences = await window.AcademicOSMail.loadPreferences().catch(() => null);
     if (savedPreferences) systemData.mail.preferences = { ...systemData.mail.preferences, ...savedPreferences };
     saveSystemData();
-    if (!window.__academicMailTimer) window.__academicMailTimer = window.setInterval(() => { if (systemData.mail.connection.connected) syncMail(true); }, 300000);
-    await syncMail();
+    startGoogleWorkspaceTimer();
+    await syncGoogleWorkspace(false);
+    renderConnections();
   } catch (error) {
     showToast(error.message || "Google connection was not completed.");
-    renderMailDashboard();
+    renderConnections();
   }
 }
 
-async function syncMail(silent = false) {
-  if (!systemData.mail.connection.connected || !window.AcademicOSMail) return connectMail();
-  const button = $("[data-mail-sync]");
-  if (button) { button.disabled = true; button.textContent = "Syncing…"; }
-  try {
-    const messages = await window.AcademicOSMail.fetchInbox(30);
-    const aiResult = await window.AcademicOSMail.runAI({
-      task: "triage",
-      messages: messages.map(({ id, sender, subject, snippet, body, receivedAt }) => ({ id, sender, subject, snippet, body: body.slice(0, 4000), receivedAt })),
-      preferences: systemData.mail.preferences
-    }).catch(() => null);
-    if (Array.isArray(aiResult?.messages)) {
-      const insights = Object.fromEntries(aiResult.messages.map(item => [item.id, item]));
-      messages.forEach(message => Object.assign(message, insights[message.id] || {}));
+function startGoogleWorkspaceTimer() {
+  if (window.__academicMailTimer) return;
+  window.__academicMailTimer = window.setInterval(() => {
+    if (systemData.mail.connection.connected) syncGoogleWorkspace(true);
+  }, 300000);
+}
+
+function mergeGoogleCalendarEvents(events) {
+  events.forEach(incoming => {
+    const existing = systemData.events.find(event => event.externalId === incoming.externalId);
+    if (!existing) {
+      systemData.events.push(incoming);
+      return;
     }
-    systemData.mail.messages = messages;
-    systemData.mail.dailySummary = aiResult?.dailySummary || "";
+    const manualFields = new Set(existing.manualFields || []);
+    Object.entries(incoming).forEach(([key, value]) => {
+      if (!manualFields.has(key)) existing[key] = value;
+    });
+  });
+}
+
+async function initializeGoogleWorkspace() {
+  if (!window.AcademicOSMail?.isConfigured()) return;
+  try {
+    const restored = await window.AcademicOSMail.restoreSession();
+    if (!restored?.connected) {
+      systemData.mail.connection.connected = false;
+      saveSystemData();
+      renderConnections();
+      return;
+    }
+    systemData.mail.connection = { ...systemData.mail.connection, mode: "live", connected: true, name: restored.name || "Google user", email: restored.email || "" };
+    const savedPreferences = await window.AcademicOSMail.loadPreferences().catch(() => null);
+    if (savedPreferences) systemData.mail.preferences = { ...systemData.mail.preferences, ...savedPreferences };
+    saveSystemData();
+    startGoogleWorkspaceTimer();
+    await syncGoogleWorkspace(true);
+    renderConnections();
+  } catch {
+    systemData.mail.connection.connected = false;
+    saveSystemData();
+  }
+}
+
+async function syncGoogleWorkspace(silent = true) {
+  if (!systemData.mail.connection.connected || !window.AcademicOSMail) return;
+  try {
+    const start = new Date();
+    start.setDate(start.getDate() - 30);
+    const end = new Date();
+    end.setDate(end.getDate() + 180);
+    const [mailResult, calendarResult] = await Promise.allSettled([
+      window.AcademicOSMail.fetchInbox(30),
+      window.AcademicOSMail.fetchCalendarEvents(start.toISOString(), end.toISOString())
+    ]);
+    if (mailResult.status === "fulfilled") {
+      const messages = mailResult.value;
+      const aiResult = await window.AcademicOSMail.runAI({
+        task: "triage",
+        messages: messages.map(({ id, sender, subject, snippet, body, receivedAt }) => ({ id, sender, subject, snippet, body: body.slice(0, 4000), receivedAt })),
+        preferences: systemData.mail.preferences
+      }).catch(() => null);
+      if (Array.isArray(aiResult?.messages)) {
+        const insights = Object.fromEntries(aiResult.messages.map(item => [item.id, item]));
+        messages.forEach(message => Object.assign(message, insights[message.id] || {}));
+      }
+      systemData.mail.messages = messages;
+      systemData.mail.dailySummary = aiResult?.dailySummary || "";
+      if (!messages.some(message => message.id === mailSelectedId)) mailSelectedId = messages[0]?.id || null;
+      refreshMailSuggestions();
+    }
+    if (calendarResult.status === "fulfilled") mergeGoogleCalendarEvents(calendarResult.value);
+    if (mailResult.status === "rejected" && calendarResult.status === "rejected") throw mailResult.reason;
     systemData.mail.connection.lastSync = new Date().toISOString();
-    mailSelectedId = messages[0]?.id || null;
-    refreshMailSuggestions();
-    renderMailDashboard();
-    if (!silent) showToast(`${messages.length} inbox messages synced.`);
+    saveSystemData();
+    if (state.view === "mail") renderMailDashboard();
+    if (state.view === "calendar") renderCalendarDashboard();
+    if (state.view === "home") renderHome();
+    if (!silent) showToast("Mail and Google Calendar are up to date.");
   } catch (error) {
-    showToast(error.message || "Inbox sync failed. Reconnect Google and try again.");
+    if (!silent) showToast(error.message || "Google sync needs to be reconnected in Settings.");
+  }
+}
+
+const syncMail = syncGoogleWorkspace;
+
+function renderHomeMailWidgets() {
+  const root = $("#homeMailIntelligence");
+  if (!root) return;
+  const messages = systemData.mail.messages;
+  const urgent = messages.filter(message => message.urgency === "urgent");
+  root.innerHTML = `<article class="mail-summary-card home-mail-summary"><div class="mail-card-top"><div><p class="kicker">AI DAILY SUMMARY</p><h2>Your inbox, distilled</h2></div><span>${systemData.mail.connection.lastSync ? `Updated ${mailTime(systemData.mail.connection.lastSync)}` : "Morning brief"}</span></div><p class="mail-summary-copy">${escapeHtml(mailSummary(messages))}</p><div class="mail-summary-stats">${mailCategories.map(category => `<span><strong>${messages.filter(message => message.category === category).length}</strong>${category}</span>`).join("")}</div></article><article class="urgent-card home-urgent-card"><div class="mail-card-top"><div><p class="kicker">URGENT ACTIONS</p><h2>Needs your attention</h2></div><span class="urgent-count">${urgent.length}</span></div><div class="urgent-list">${urgent.slice(0, 4).map(message => `<button data-home-mail-message="${message.id}" type="button"><span class="urgency-dot"></span><span><strong>${escapeHtml(message.subject)}</strong><small>${escapeHtml(senderName(message.sender))} · ${mailTime(message.receivedAt)}</small></span><b>→</b></button>`).join("") || `<div class="empty-list">No urgent requests detected.</div>`}</div></article>`;
+  root.querySelectorAll("[data-home-mail-message]").forEach(button => button.addEventListener("click", () => {
+    mailSelectedId = button.dataset.homeMailMessage;
+    switchView("mail");
+  }));
+}
+
+async function generateReplyDraft(root, selected, prefs, button = null) {
+  const textarea = root.querySelector("[data-reply-draft]");
+  const tone = root.querySelector("[data-reply-tone]")?.value || prefs.replyTone;
+  if (!textarea) return;
+  if (button) { button.disabled = true; button.textContent = "Drafting…"; }
+  textarea.placeholder = "Drafting a context-aware reply…";
+  try {
+    const result = await window.AcademicOSMail?.runAI({ task: "draft", message: selected, preferences: { ...prefs, replyTone: tone } });
+    textarea.value = result?.draft || localReplyDraft(selected, tone);
+  } catch { textarea.value = localReplyDraft(selected, tone); }
+  textarea.placeholder = "Edit your reply";
+  if (button) { button.disabled = false; button.textContent = "✦ Regenerate"; }
+}
+
+async function moveMailToTrash(message) {
+  if (!confirm(`Move “${message.subject}” to Trash?`)) return;
+  const button = $("[data-trash-mail]");
+  if (button) { button.disabled = true; button.textContent = "Moving…"; }
+  try {
+    if (systemData.mail.connection.connected && message.source === "Gmail") await window.AcademicOSMail.trashMessage(message.id);
+    systemData.mail.messages = systemData.mail.messages.filter(item => item.id !== message.id);
+    systemData.mailSuggestions.filter(item => item.mailMessageId === message.id && item.status === "pending").forEach(item => { item.status = "dismissed"; });
+    mailSelectedId = systemData.mail.messages[0]?.id || null;
+    saveSystemData();
     renderMailDashboard();
+    renderHomeMailWidgets();
+    showToast("Message moved to Trash.");
+  } catch (error) {
+    if (button) { button.disabled = false; button.textContent = "Trash"; }
+    showToast(error.message || "The message could not be moved to Trash.");
   }
 }
 
@@ -254,23 +358,12 @@ function renderMailDashboard() {
   const urgent = allMessages.filter(message => message.urgency === "urgent");
   const pending = systemData.mailSuggestions.filter(item => item.status === "pending");
   const connected = systemData.mail.connection.connected;
-  const connectionText = connected ? `${escapeHtml(systemData.mail.connection.email)} · ${systemData.mail.connection.lastSync ? `synced ${mailTime(systemData.mail.connection.lastSync)}` : "ready to sync"}` : "Demo inbox · connect Google for live mail";
   root.innerHTML = systemHeader("AI MAILROOM", "Mail", "A focused inbox that turns messages into actions, replies, and calendar-ready decisions.", [[allMessages.filter(item => item.unread).length, "UNREAD"], [urgent.length, "URGENT"], [pending.length, "CALENDAR PROPOSALS"]]) + `
-    ${!prefs.onboarded ? `<section class="mail-onboarding-banner"><div><span class="mail-spark">✦</span><div><p class="kicker">MAKE IT YOURS</p><h2>Train your inbox in five quick questions</h2><p>Choose what matters, how replies sound, and when Calendar should act.</p></div></div><div><button class="button secondary" data-mail-defaults type="button">Use smart defaults</button><button class="button primary" data-mail-onboarding type="button">Personalize inbox</button></div></section>` : ""}
-    <section class="mail-status-bar"><div><span class="sync-dot ${connected ? "" : "demo"}"></span><strong>${connected ? "Google connected" : "Preview mode"}</strong><small>${connectionText}</small></div><div><button class="button secondary" data-mail-onboarding type="button">Triage settings</button>${connected ? `<button class="button primary" data-mail-sync type="button">Sync inbox</button>` : `<button class="button primary" data-mail-connect type="button">Connect Google</button>`}</div></section>
-    <section class="mail-signal-grid">
-      <article class="mail-summary-card"><div class="mail-card-top"><div><p class="kicker">AI DAILY SUMMARY</p><h2>Your inbox, distilled</h2></div><span>Updated now</span></div><p class="mail-summary-copy">${escapeHtml(mailSummary(allMessages))}</p><div class="mail-summary-stats">${mailCategories.map(category => `<span><strong>${allMessages.filter(message => message.category === category).length}</strong>${category}</span>`).join("")}</div></article>
-      <article class="urgent-card"><div class="mail-card-top"><div><p class="kicker">URGENT ACTIONS</p><h2>Needs your attention</h2></div><span class="urgent-count">${urgent.length}</span></div><div class="urgent-list">${urgent.slice(0, 3).map(message => `<button data-mail-message="${message.id}" type="button"><span class="urgency-dot"></span><span><strong>${escapeHtml(message.subject)}</strong><small>${escapeHtml(senderName(message.sender))} · ${mailTime(message.receivedAt)}</small></span><b>→</b></button>`).join("") || `<div class="empty-list">No urgent requests detected.</div>`}</div></article>
-    </section>
     <section class="mail-workspace">
       <div class="mail-inbox-panel"><div class="mail-inbox-head"><div><p class="kicker">CURATED INBOX</p><h2>${visibleMessages.length} messages</h2></div><label class="mail-search"><span class="search-icon"></span><input data-mail-search type="search" value="${escapeHtml(mailQuery)}" placeholder="Search mail"></label></div><div class="mail-filter-row"><button class="filter-chip ${mailFilter === "all" ? "active" : ""}" data-mail-filter="all" type="button">All</button>${mailCategories.map(category => `<button class="filter-chip ${mailFilter === category ? "active" : ""}" data-mail-filter="${category}" type="button">${category}</button>`).join("")}</div><div class="mail-list">${visibleMessages.map(message => `<button class="mail-row ${message.id === mailSelectedId ? "active" : ""} ${message.unread ? "unread" : ""}" data-mail-message="${message.id}" type="button"><span class="mail-avatar">${systemInitials(senderName(message.sender))}</span><span class="mail-row-copy"><span><strong>${escapeHtml(senderName(message.sender))}</strong><time>${mailTime(message.receivedAt)}</time></span><b>${escapeHtml(message.subject)}</b><small>${escapeHtml(message.snippet || message.body).slice(0, 110)}</small><em class="mail-category category-${message.category.toLowerCase()}">${escapeHtml(message.category)}</em></span></button>`).join("") || `<div class="mail-empty"><span>✉</span><strong>No messages found</strong><p>Try another category or search term.</p></div>`}</div></div>
-      <aside class="mail-reader">${selected ? `<div class="mail-reader-head"><div><span class="mail-category category-${selected.category.toLowerCase()}">${escapeHtml(selected.category)}</span><h2>${escapeHtml(selected.subject)}</h2><p>From ${escapeHtml(selected.sender)} · ${mailTime(selected.receivedAt)}</p></div><button class="button secondary" data-mail-read="${selected.id}" type="button">${selected.unread ? "Mark read" : "Mark unread"}</button></div><div class="mail-body">${escapeHtml(selected.body || selected.snippet).replaceAll("\n", "<br>")}</div><div class="reply-assistant"><div class="reply-head"><div><span class="mail-spark">✦</span><div><p class="kicker">QUICK-REPLY ASSISTANT</p><h3>Context-aware draft</h3></div></div><select data-reply-tone aria-label="Reply tone"><option value="concise" ${prefs.replyTone === "concise" ? "selected" : ""}>Concise</option><option value="warm" ${prefs.replyTone === "warm" ? "selected" : ""}>Warm</option><option value="formal" ${prefs.replyTone === "formal" ? "selected" : ""}>Formal</option></select></div><textarea data-reply-draft rows="7">${escapeHtml(localReplyDraft(selected))}</textarea><div class="reply-actions"><button class="button secondary" data-generate-reply="${selected.id}" type="button">✦ Regenerate</button><button class="button primary" data-save-draft="${selected.id}" type="button" ${connected ? "" : "disabled"}>Save to Gmail drafts</button></div>${!connected ? `<small>Connect Google to save this reply directly to Gmail.</small>` : ""}</div>` : `<div class="mail-empty reader-empty"><span>✉</span><strong>Select a message</strong><p>Its contents and reply assistant will appear here.</p></div>`}</aside>
+      <aside class="mail-reader">${selected ? `<div class="mail-reader-head"><div><span class="mail-category category-${selected.category.toLowerCase()}">${escapeHtml(selected.category)}</span><h2>${escapeHtml(selected.subject)}</h2><p>From ${escapeHtml(selected.sender)} · ${mailTime(selected.receivedAt)}</p></div><div class="mail-reader-actions"><button class="button secondary" data-mail-read="${selected.id}" type="button">${selected.unread ? "Mark read" : "Mark unread"}</button><button class="button danger" data-trash-mail="${selected.id}" type="button">Trash</button></div></div><div class="mail-body">${escapeHtml(selected.body || selected.snippet).replaceAll("\n", "<br>")}</div><details class="reply-assistant" data-reply-assistant><summary><span class="mail-spark">✦</span><span><small>AI QUICK-REPLY</small><strong>Draft a context-aware response</strong></span><i>⌄</i></summary><div class="reply-content"><div class="reply-toolbar"><label>Reply tone<select data-reply-tone aria-label="Reply tone"><option value="concise" ${prefs.replyTone === "concise" ? "selected" : ""}>Concise</option><option value="warm" ${prefs.replyTone === "warm" ? "selected" : ""}>Warm</option><option value="formal" ${prefs.replyTone === "formal" ? "selected" : ""}>Formal</option></select></label></div><textarea data-reply-draft rows="7" placeholder="Open the assistant to generate a draft"></textarea><div class="reply-actions"><button class="button secondary" data-generate-reply="${selected.id}" type="button">✦ Regenerate</button><button class="button primary" data-save-draft="${selected.id}" type="button" ${connected ? "" : "disabled"}>Save to Gmail drafts</button></div>${!connected ? `<small>Reconnect Google from Settings to save drafts.</small>` : ""}</div></details>` : `<div class="mail-empty reader-empty"><span>✉</span><strong>Select a message</strong><p>Its contents and reply assistant will appear here.</p></div>`}</aside>
     </section>`;
 
-  root.querySelectorAll("[data-mail-onboarding]").forEach(button => button.addEventListener("click", mailOnboarding));
-  root.querySelector("[data-mail-defaults]")?.addEventListener("click", useMailDefaults);
-  root.querySelector("[data-mail-connect]")?.addEventListener("click", connectMail);
-  root.querySelector("[data-mail-sync]")?.addEventListener("click", syncMail);
   root.querySelectorAll("[data-mail-filter]").forEach(button => button.addEventListener("click", () => { mailFilter = button.dataset.mailFilter; renderMailDashboard(); }));
   root.querySelector("[data-mail-search]")?.addEventListener("input", event => {
     mailQuery = event.target.value;
@@ -292,17 +385,16 @@ function renderMailDashboard() {
     if (connected) window.AcademicOSMail?.setRead(selected.id, !selected.unread).catch(() => {});
     saveSystemData(); renderMailDashboard();
   });
-  root.querySelector("[data-reply-tone]")?.addEventListener("change", event => { root.querySelector("[data-reply-draft]").value = localReplyDraft(selected, event.target.value); });
-  root.querySelector("[data-generate-reply]")?.addEventListener("click", async event => {
-    const button = event.currentTarget, textarea = root.querySelector("[data-reply-draft]"), tone = root.querySelector("[data-reply-tone]").value;
-    button.disabled = true; button.textContent = "Drafting…";
-    try {
-      const result = await window.AcademicOSMail?.runAI({ task: "draft", message: selected, preferences: { ...prefs, replyTone: tone } });
-      textarea.value = result?.draft || localReplyDraft(selected, tone);
-      showToast(result?.draft ? "AI reply drafted." : "Reply refreshed with your preferences.");
-    } catch (error) { textarea.value = localReplyDraft(selected, tone); showToast(error.message || "Used the on-device reply assistant."); }
-    button.disabled = false; button.textContent = "✦ Regenerate";
+  root.querySelector("[data-trash-mail]")?.addEventListener("click", () => moveMailToTrash(selected));
+  const assistant = root.querySelector("[data-reply-assistant]");
+  assistant?.addEventListener("toggle", () => {
+    if (assistant.open && !assistant.dataset.generated) {
+      assistant.dataset.generated = "true";
+      generateReplyDraft(root, selected, prefs, root.querySelector("[data-generate-reply]"));
+    }
   });
+  root.querySelector("[data-reply-tone]")?.addEventListener("change", () => generateReplyDraft(root, selected, prefs));
+  root.querySelector("[data-generate-reply]")?.addEventListener("click", event => generateReplyDraft(root, selected, prefs, event.currentTarget));
   root.querySelector("[data-save-draft]")?.addEventListener("click", async event => {
     const button = event.currentTarget; button.disabled = true; button.textContent = "Saving…";
     try { await window.AcademicOSMail.createDraft(selected, root.querySelector("[data-reply-draft]").value); button.textContent = "Saved to Gmail"; showToast("Reply saved to Gmail drafts."); }
@@ -311,3 +403,5 @@ function renderMailDashboard() {
   const navCount = $("#mailNavCount");
   if (navCount) { navCount.textContent = urgent.length; navCount.hidden = !urgent.length; }
 }
+
+document.addEventListener("academic-os-mail-ready", initializeGoogleWorkspace, { once: true });

@@ -55,6 +55,8 @@ Networking follow-up┘
 - Firebase Authentication is the identity boundary. Google sign-in requests `gmail.modify` and `calendar.events` only when the user connects Mail.
 - The browser access token is held in memory and is never written to local storage or Firestore. A new consent flow restores Google API access after a reload.
 - Gmail messages are fetched directly from the Gmail API. The prototype retains the current inbox snapshot locally; production should retain only provider IDs, derived insights, and cursors unless the user explicitly opts into body storage.
+- A connected browser session refreshes Gmail and the primary Google Calendar together at startup and every five minutes. Provider event IDs are upserted into the shared Calendar projection so repeated syncs do not duplicate events.
+- Mail read/unread state is written through Gmail labels. Trash uses Gmail's recoverable `users.messages.trash` operation rather than permanent deletion.
 - Per-user triage preferences are stored at `users/{uid}/settings/mail`, protected by owner-only Firestore rules.
 - AI processing is routed through an authenticated HTTPS function so model credentials never enter the browser. Deterministic academic triage remains available when the function is absent or unavailable.
 - Approved and automatic events carry `externalId = mail:{messageId}` to make ingestion idempotent. Google Calendar events also receive private extended properties identifying the originating message.

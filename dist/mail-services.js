@@ -3,6 +3,7 @@ const FIREBASE_BASE = `https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}`;
 const config = window.ACADEMIC_OS_CONFIG || {};
 let firebaseModules;
 let session = { user: null, accessToken: null };
+const SESSION_KEY = "academic-os-google-session";
 
 const isConfigured = () => Boolean(
   config.firebase?.apiKey &&
@@ -40,12 +41,34 @@ async function connect() {
   const credential = sdk.GoogleAuthProvider.credentialFromResult(result);
   session = { user: result.user, accessToken: credential?.accessToken || null };
   if (!session.accessToken) throw new Error("Google did not return an inbox access token. Please reconnect.");
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify({ accessToken: session.accessToken, expiresAt: Date.now() + 55 * 60 * 1000 }));
   return { uid: result.user.uid, name: result.user.displayName, email: result.user.email, photoURL: result.user.photoURL };
+}
+
+async function restoreSession() {
+  if (!isConfigured()) return null;
+  const sdk = await modules();
+  const user = await new Promise(resolve => {
+    const unsubscribe = sdk.onAuthStateChanged(sdk.auth, currentUser => {
+      unsubscribe();
+      resolve(currentUser);
+    });
+  });
+  let stored = null;
+  try { stored = JSON.parse(sessionStorage.getItem(SESSION_KEY) || "null"); } catch { stored = null; }
+  if (!user || !stored?.accessToken || stored.expiresAt <= Date.now()) {
+    sessionStorage.removeItem(SESSION_KEY);
+    session = { user: user || null, accessToken: null };
+    return user ? { uid: user.uid, name: user.displayName, email: user.email, connected: false } : null;
+  }
+  session = { user, accessToken: stored.accessToken };
+  return { uid: user.uid, name: user.displayName, email: user.email, photoURL: user.photoURL, connected: true };
 }
 
 async function disconnect() {
   if (!firebaseModules) return;
   await firebaseModules.signOut(firebaseModules.auth);
+  sessionStorage.removeItem(SESSION_KEY);
   session = { user: null, accessToken: null };
 }
 
@@ -143,6 +166,50 @@ async function setRead(messageId, isRead) {
   });
 }
 
+async function trashMessage(messageId) {
+  return googleJson(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/trash`, { method: "POST" });
+}
+
+async function fetchCalendarEvents(timeMin, timeMax) {
+  const params = new URLSearchParams({
+    timeMin,
+    timeMax,
+    singleEvents: "true",
+    orderBy: "startTime",
+    showDeleted: "false",
+    maxResults: "2500"
+  });
+  const response = await googleJson(`https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`);
+  return (response.items || []).filter(event => event.status !== "cancelled").map(event => {
+    const allDay = Boolean(event.start?.date);
+    const startValue = event.start?.dateTime || event.start?.date || new Date().toISOString();
+    const endValue = event.end?.dateTime || event.end?.date || startValue;
+    const start = allDay ? "09:00" : startValue.slice(11, 16);
+    const end = allDay ? "10:00" : endValue.slice(11, 16);
+    return {
+      id: `google-${event.id}`,
+      externalId: `google-calendar:${event.id}`,
+      googleEventId: event.id,
+      title: event.summary || "Untitled Google Calendar event",
+      date: startValue.slice(0, 10),
+      start,
+      end: end > start ? end : addOneHour(start),
+      source: "Google",
+      priority: "medium",
+      zone: "Flexible",
+      notes: [allDay ? "All-day event" : "", event.location || "", event.description || ""].filter(Boolean).join(" · ").slice(0, 1000),
+      allDay,
+      htmlLink: event.htmlLink || "",
+      updated: event.updated || ""
+    };
+  });
+}
+
+function addOneHour(time) {
+  const [hour, minute] = time.split(":").map(Number);
+  return `${String((hour + 1) % 24).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
 async function createCalendarEvent(event) {
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "America/New_York";
   return googleJson("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
@@ -191,13 +258,18 @@ async function runAI(payload) {
 window.AcademicOSMail = {
   isConfigured,
   connect,
+  restoreSession,
   disconnect,
   fetchInbox,
+  fetchCalendarEvents,
   createDraft,
   setRead,
+  trashMessage,
   createCalendarEvent,
   savePreferences,
   loadPreferences,
   runAI,
   getSession: () => ({ user: session.user ? { uid: session.user.uid, name: session.user.displayName, email: session.user.email, photoURL: session.user.photoURL } : null, connected: Boolean(session.accessToken) })
 };
+
+document.dispatchEvent(new CustomEvent("academic-os-mail-ready"));
