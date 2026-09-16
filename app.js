@@ -364,10 +364,6 @@ const currentCourse = () => courses.find(course => course.id === state.courseId)
 function persistAcademicData() {
   localStorage.setItem("academicOsCourses", JSON.stringify(courses));
   localStorage.setItem("academicOsCourse", state.courseId);
-  $("#libraryCount").textContent = allSources().length;
-  const libraryValue = $("#libraryCourseFilter")?.value || "all";
-  $("#libraryCourseFilter").innerHTML = `<option value="all">All courses</option>` + courses.map(course => `<option value="${course.id}">${escapeHtml(course.code)} · ${escapeHtml(course.name)}</option>`).join("");
-  $("#libraryCourseFilter").value = courses.some(course => course.id === libraryValue) ? libraryValue : "all";
   $("#noteCourseInput").innerHTML = courses.map(course => `<option value="${course.id}">${escapeHtml(course.code)} · ${escapeHtml(course.name)}</option>`).join("");
 }
 
@@ -816,7 +812,6 @@ function renderAcademicDashboard() {
     </button>`;
   }).join("") : `<div class="empty-list">No classes yet. Add your first course to begin.</div>`;
   $$('[data-academic-course]').forEach(button => button.addEventListener("click", () => selectCourse(button.dataset.academicCourse)));
-  renderLibrary();
 }
 
 function mixHex(color, target, amount) {
@@ -1104,43 +1099,6 @@ function switchView(view) {
   closeSidebar();
 }
 
-function allSources() {
-  return courses.flatMap(course => course.sources.map(source => ({ ...source, courseId: course.id, courseName: course.name, courseCode: course.code, courseColor: course.color })));
-}
-
-function renderLibrary() {
-  const query = $("#librarySearch").value.trim().toLowerCase();
-  const courseFilter = $("#libraryCourseFilter").value || "all";
-  const sources = allSources().filter(source => {
-    const matchesCourse = courseFilter === "all" || source.courseId === courseFilter;
-    const haystack = `${source.title} ${source.author} ${source.courseName} ${source.tags.join(" ")}`.toLowerCase();
-    return matchesCourse && haystack.includes(query);
-  });
-
-  $("#libraryGrid").innerHTML = sources.length ? sources.map(source => `
-    <article class="library-card" data-library-course="${source.courseId}" data-library-source="${source.id}" tabindex="0" role="button">
-      <div class="library-card-head">
-        <span class="source-type-icon ${source.type}">${sourceIcon(source.type)}</span>
-        <span class="status-pill">${escapeHtml(source.status)}</span>
-      </div>
-      <h3>${escapeHtml(source.title)}</h3>
-      <p>${escapeHtml(source.summary)}</p>
-      <div class="library-card-meta">
-        <span>${escapeHtml(source.courseCode)}</span>
-        <span>${escapeHtml(source.author)} · ${escapeHtml(source.year)}</span>
-      </div>
-    </article>
-  `).join("") : `<div class="empty-list">No sources found.</div>`;
-
-  $$(".library-card").forEach(card => {
-    const open = () => selectCourse(card.dataset.libraryCourse, card.dataset.librarySource);
-    card.addEventListener("click", open);
-    card.addEventListener("keydown", event => {
-      if (event.key === "Enter" || event.key === " ") open();
-    });
-  });
-}
-
 function renderConnections() {
   const googleConnected = systemData.mail.connection.connected;
   $("#connectionGrid").innerHTML = integrations.map(item => {
@@ -1162,12 +1120,6 @@ function renderConnections() {
     </article>
   `; }).join("");
   $("[data-google-connect]")?.addEventListener("click", connectMail);
-}
-
-function setupLibraryControls() {
-  $("#libraryCourseFilter").innerHTML = `<option value="all">All courses</option>` + courses.map(course => `<option value="${course.id}">${escapeHtml(course.code)} · ${escapeHtml(course.name)}</option>`).join("");
-  $("#librarySearch").addEventListener("input", renderLibrary);
-  $("#libraryCourseFilter").addEventListener("change", renderLibrary);
 }
 
 function updateCaptureSources() {
@@ -1337,12 +1289,6 @@ function setupEvents() {
     renderNotes();
   }));
   $("#closeContext").addEventListener("click", clearContext);
-  $("#viewAllSources").addEventListener("click", () => {
-    switchView("academic");
-    $("#libraryCourseFilter").value = state.courseId;
-    renderLibrary();
-    requestAnimationFrame(() => $("#academicLibrary").scrollIntoView({ behavior: "smooth", block: "start" }));
-  });
   $("#openConnections").addEventListener("click", () => switchView("settings"));
   $("#addCourse").addEventListener("click", () => courseForm());
   $("#academicAddCourse").addEventListener("click", () => courseForm());
@@ -1364,7 +1310,6 @@ function setupEvents() {
   });
   $$('[data-home-target]').forEach(button => button.addEventListener("click", () => {
     switchView(button.dataset.homeTarget);
-    if (button.dataset.homeSection === "library") requestAnimationFrame(() => $("#academicLibrary").scrollIntoView({ behavior: "smooth", block: "start" }));
   }));
   $$('[data-home-course]').forEach(button => button.addEventListener("click", () => selectCourse(button.dataset.homeCourse)));
   $("#profileButton").addEventListener("click", () => showToast("This private prototype stores changes in your browser."));
@@ -1376,8 +1321,6 @@ function setupEvents() {
 function init() {
   applyTheme();
   applyTabPreferences();
-  $("#libraryCount").textContent = allSources().length;
-  setupLibraryControls();
   setupCapture();
   setupSearch();
   setupEvents();
