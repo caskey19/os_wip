@@ -316,6 +316,11 @@ async function runAI(payload) {
   return response.json();
 }
 
+async function getIdToken() {
+  if (!session.user) return null;
+  return session.user.getIdToken();
+}
+
 window.AcademicOSMail = {
   isConfigured,
   connect,
@@ -333,6 +338,7 @@ window.AcademicOSMail = {
   saveWorkspace,
   loadWorkspace,
   runAI,
+  getIdToken,
   getSession: () => ({ user: session.user ? { uid: session.user.uid, name: session.user.displayName, email: session.user.email, photoURL: session.user.photoURL } : null, connected: Boolean(session.accessToken) })
 };
 

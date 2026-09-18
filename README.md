@@ -1,6 +1,8 @@
-# BRAIN OS
+# Aether
 
-A private, browser-saved operating system combining Cornell academics with relationship intelligence, calendar coordination, student-athlete performance, and personal capital.
+A private student-athlete operating system for academics, mail, calendar, network, tasks & goals, health, and capital — with per-account isolation and a labeled demo mode for guests.
+
+Live site: [https://caskey19.github.io/os_wip/](https://caskey19.github.io/os_wip/)
 
 ## Run locally
 
@@ -8,26 +10,30 @@ A private, browser-saved operating system combining Cornell academics with relat
 npm run dev
 ```
 
-Open `http://127.0.0.1:4173` for Academic OS or `http://127.0.0.1:4173/brain/` for the four new modules. Build the publishable static bundle with `npm run build`.
+Open `http://127.0.0.1:4173`. Build the GitHub Pages bundle with `npm run build`.
 
-## Working systems
+## What’s in this OS
 
-- Home: professional command center with live daily priorities and summaries across every OS module.
-- Academic OS: courses, connected sources and notes, citations, research library, and academic provider contracts.
-- Networking: DNA relationship graph, contact inspector, interaction history, optional Calendar follow-ups, and full contact CRUD.
-- Calendar: 1-day, 3-day, week, and month views; direct event editing; provenance, priorities, time-block zones, and module sync indicators.
-- Mail: Firebase Google sign-in, live Gmail sync, preference-driven AI triage, urgent actions, daily summaries, reply drafts, and Mail-to-Calendar review or automatic scheduling.
-- Health & Performance: recovery, exertion, load, sleep, heart-rate widgets, editable logs, providers, and health-to-calendar adjustments.
-- Capital: cash flow, spending categories, editable ledger, recurring costs, savings goals, and CSV export.
-- Shared: local persistence, global search, provider adapter states, responsive layouts, and WebMCP add-event/add-contact tools.
+- **Home** — curated command center (widget catalog + chart/list/bullets/KPI modes)
+- **Academic** — courses, sources, notes
+- **Tasks & Goals** — obligations and season/semester targets
+- **Network** — interactive ego graph, filters, email review queue, CSV import
+- **Calendar** — Google Calendar sync, mail proposals (approve-first), athletic ICS/CSV import
+- **Mail** — Firebase Google sign-in, Gmail triage, drafts, calendar/task/network detections
+- **Health** — Strava/Fitbit connect UX, suggest → apply coaching against goals
+- **Capital** — net worth, cashflow, budgets, portfolio P/L, PIN lock, Plaid/Finnhub wiring
 
-See [PRODUCT_SPEC.md](docs/PRODUCT_SPEC.md), [DATA_SCHEMA.md](docs/DATA_SCHEMA.md), and [INTEGRATIONS.md](docs/INTEGRATIONS.md) for the implementation blueprint.
+## Account isolation
 
-## Enable live Mail
+- Guest / demo uses `aether:guest:*` local keys and a watermarked seed.
+- Google accounts use `aether:{uid}:*` plus Firestore `users/{uid}/**`.
+- Signed-in users never receive sample stocks, contacts, or health theater.
 
-1. Create a Firebase web app with Google Authentication and Firestore enabled.
-2. Enable the Gmail API and Google Calendar API on the linked Google Cloud project, then add the app origin to the OAuth client.
-3. Add the Firebase public web values in `firebase-config.js`. Set `aiEndpoint` to an authenticated Firebase Function (or equivalent HTTPS proxy) that implements the contract in [MAIL_ARCHITECTURE.md](docs/MAIL_ARCHITECTURE.md).
-4. Deploy `firestore.rules` before enabling preference sync.
+## Enable live Mail & providers
 
-Without provider configuration, Mail runs as a complete interactive demo and uses its deterministic academic triage/reply fallback.
+1. Firebase web app with Google Auth + Firestore ([`firebase-config.js`](firebase-config.js)).
+2. Gmail API + Google Calendar API OAuth origins (including GitHub Pages).
+3. Deploy [`firestore.rules`](firestore.rules).
+4. Optional: Cloud Functions for Finnhub, Strava, Fitbit, Plaid, push — see [`docs/PROVIDER_SETUP.md`](docs/PROVIDER_SETUP.md).
+
+Without Functions credentials, Connect buttons run a safe demo-mode handshake so investor demos still work.

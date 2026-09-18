@@ -1,3 +1,6 @@
 node_modules/
 .sites-runtime/
 *.zip
+
+node_modules/
+package-lock.json
