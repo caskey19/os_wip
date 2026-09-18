@@ -402,6 +402,7 @@ function enterAetherGuest() {
   window.AetherWorkspace?.resetSessionState?.();
   window.AetherWorkspaceLoad?.("guest");
   window.AetherWorkspace?.disableCloudSync();
+  window.AetherWorkspace?.setSyncLabel?.("Demo · local only", "local");
   window.AetherCurrentUserName = "Demo";
   $("#profileName").textContent = "Demo workspace";
   $("#profileEmail").textContent = "Labeled sample data";
