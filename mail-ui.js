@@ -332,6 +332,7 @@ const syncMail = syncGoogleWorkspace;
 
 let aetherLoginInFlight = false;
 let aetherActiveUid = null;
+let aetherGuestMode = localStorage.getItem("aetherGuestMode") === "true";
 
 function setLoginState(message, isError = false) {
   const status = $("#loginStatus");
@@ -352,6 +353,23 @@ function showAetherLogin(message = "") {
   history.replaceState(null, "", "#login");
 }
 
+function enterAetherGuest() {
+  aetherGuestMode = true;
+  aetherActiveUid = "guest";
+  localStorage.setItem("aetherGuestMode", "true");
+  window.AetherWorkspace?.disableCloudSync();
+  window.AetherCurrentUserName = "Guest";
+  $("#profileName").textContent = "Guest workspace";
+  $("#profileEmail").textContent = "Stored on this device";
+  $("#profileAvatar").textContent = "G";
+  $("#profileButton").title = "Exit guest mode";
+  $("#loginGate").hidden = true;
+  $("#appShell").hidden = false;
+  if (location.hash === "#login") switchView("home");
+  renderHome();
+  showToast("Guest mode is ready. Google services stay disconnected.");
+}
+
 function updateAetherProfile(user) {
   const name = user.name || user.displayName || user.email?.split("@")[0] || "Aether user";
   const email = user.email || "Sign out";
@@ -369,6 +387,8 @@ function updateAetherProfile(user) {
 async function enterAether(user, liveGoogleUser = null) {
   const uid = user?.uid;
   if (!uid || (aetherActiveUid === uid && !liveGoogleUser)) return;
+  aetherGuestMode = false;
+  localStorage.removeItem("aetherGuestMode");
   aetherActiveUid = uid;
   $("#aetherGoogleLogin").disabled = true;
   setLoginState("Restoring your Aether workspace…");
@@ -388,7 +408,13 @@ async function enterAether(user, liveGoogleUser = null) {
 async function initializeAetherAuth() {
   const service = window.AcademicOSMail;
   const loginButton = $("#aetherGoogleLogin");
-  if (!service?.isConfigured()) return showAetherLogin("Firebase needs to be configured before sign-in.");
+  const guestButton = $("#aetherGuestLogin");
+  guestButton.addEventListener("click", () => enterAetherGuest());
+  if (!service?.isConfigured()) {
+    if (aetherGuestMode) enterAetherGuest();
+    else showAetherLogin("Firebase needs to be configured before sign-in.");
+    return;
+  }
   loginButton.disabled = false;
   loginButton.addEventListener("click", async () => {
     aetherLoginInFlight = true;
@@ -407,13 +433,21 @@ async function initializeAetherAuth() {
     }
   });
   $("#profileButton").addEventListener("click", async () => {
+    if (aetherGuestMode) {
+      aetherGuestMode = false;
+      aetherActiveUid = null;
+      localStorage.removeItem("aetherGuestMode");
+      showAetherLogin();
+      return;
+    }
     if (!confirm("Sign out of Aether on this device?")) return;
     await window.AetherWorkspace?.saveNow();
     await service.disconnect();
   });
   await service.observeAuth(user => {
     if (aetherLoginInFlight) return;
-    if (!user) showAetherLogin();
+    if (aetherGuestMode) enterAetherGuest();
+    else if (!user) showAetherLogin();
     else enterAether(user);
   });
 }
