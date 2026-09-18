@@ -12,5 +12,7 @@ window.ACADEMIC_OS_CONFIG = {
   },
   // HTTPS Firebase Function (or equivalent authenticated proxy) accepting
   // { task: "triage" | "draft", messages?, message?, preferences? }.
-  aiEndpoint: ""
+  aiEndpoint: "",
+  // HTTPS Cloud Functions base, e.g. https://us-central1-studentathleteos.cloudfunctions.net
+  functionsBase: ""
 };

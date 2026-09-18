@@ -345,26 +345,34 @@ const state = {
   searchItems: []
 };
 
-const defaultTabPreferences = { academic: true, networking: true, calendar: true, health: true, capital: true };
-const tabLabels = { academic: "Academic", networking: "Networking", calendar: "Calendar", health: "Health & performance", capital: "Capital" };
+const defaultTabPreferences = { academic: true, tasks: true, networking: true, calendar: true, health: true, capital: true };
+const tabLabels = { academic: "Academic", tasks: "Tasks & Goals", networking: "Network", calendar: "Calendar", health: "Health", capital: "Capital" };
 const themePresets = {
-  forest: { name: "Aether Forest", accent: "#315e4b", paper: "#f5f4ef", sidebar: "#16221d" },
-  cornell: { name: "Cornell Studio", accent: "#7a263a", paper: "#f7f4f1", sidebar: "#281b1f" },
-  midnight: { name: "Midnight Blue", accent: "#365c78", paper: "#f2f4f6", sidebar: "#15232d" }
+  charcoal: { name: "Charcoal Luxury", accent: "#c8a96b", paper: "#0c0d10", sidebar: "#08090c", baseTheme: "charcoal" },
+  cornell: { name: "Cornell", accent: "#B31B1B", paper: "#0c0d10", sidebar: "#08090c", baseTheme: "charcoal" },
+  mono: { name: "Black / White", accent: "#ffffff", paper: "#050505", sidebar: "#000000", baseTheme: "mono" }
 };
 let tabPreferences;
 let themePreferences;
-try { tabPreferences = { ...defaultTabPreferences, ...JSON.parse(localStorage.getItem("aetherVisibleTabs") || "{}") }; } catch { tabPreferences = { ...defaultTabPreferences }; }
-try { themePreferences = { ...themePresets.forest, ...JSON.parse(localStorage.getItem("aetherTheme") || "{}") }; } catch { themePreferences = { ...themePresets.forest }; }
+const aetherStorageKey = suffix => (window.AetherCore ? window.AetherCore.key(suffix) : `aether:guest:${suffix}`);
+const readScoped = (suffix, fallback) => {
+  try { return JSON.parse(localStorage.getItem(aetherStorageKey(suffix)) || "null") ?? fallback; } catch { return fallback; }
+};
+const writeScoped = (suffix, value) => localStorage.setItem(aetherStorageKey(suffix), JSON.stringify(value));
+try { tabPreferences = { ...defaultTabPreferences, ...readScoped("tabs", {}) }; } catch { tabPreferences = { ...defaultTabPreferences }; }
+try { themePreferences = { ...themePresets.charcoal, ...readScoped("theme", {}) }; } catch { themePreferences = { ...themePresets.charcoal }; }
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 const currentCourse = () => courses.find(course => course.id === state.courseId) || courses[0];
 
 function persistAcademicData() {
-  localStorage.setItem("academicOsCourses", JSON.stringify(courses));
-  localStorage.setItem("academicOsCourse", state.courseId);
-  $("#noteCourseInput").innerHTML = courses.map(course => `<option value="${course.id}">${escapeHtml(course.code)} · ${escapeHtml(course.name)}</option>`).join("");
+  writeScoped("courses", courses);
+  writeScoped("courseId", state.courseId);
+  localStorage.removeItem("academicOsCourses");
+  localStorage.removeItem("academicOsCourse");
+  const noteCourse = $("#noteCourseInput");
+  if (noteCourse) noteCourse.innerHTML = courses.map(course => `<option value="${course.id}">${escapeHtml(course.code)} · ${escapeHtml(course.name)}</option>`).join("");
   scheduleCloudSave();
 }
 
@@ -528,48 +536,107 @@ const systemSeed = {
   },
   mailSuggestions: []
 };
+
+function normalizeSystemData(raw, { demo = false } = {}) {
+  const core = window.AetherCore;
+  const base = demo ? core.demoWorkspace() : (raw && typeof raw === "object" ? raw : core.emptyWorkspace());
+  const shaped = window.AetherModules?.ensureShape ? window.AetherModules.ensureShape(structuredClone(base)) : structuredClone(base);
+  ["contacts", "links", "opportunities", "events", "health", "transactions", "subscriptions", "goals", "mailSuggestions", "tasks", "athleteGoals", "reviewQueue", "notifications", "portfolios", "budgets"].forEach(key => {
+    if (!Array.isArray(shaped[key])) shaped[key] = [];
+  });
+  if (!shaped.mail || typeof shaped.mail !== "object") shaped.mail = core.emptyMail();
+  shaped.mail.connection = { ...(demo ? core.demoWorkspace().mail.connection : core.emptyMail().connection), ...(shaped.mail.connection || {}) };
+  shaped.mail.connection.connected = Boolean(shaped.mail.connection.connected && !demo);
+  shaped.mail.preferences = { ...core.emptyMail().preferences, ...(shaped.mail.preferences || {}) };
+  if (!Array.isArray(shaped.mail.messages)) shaped.mail.messages = demo ? core.demoWorkspace().mail.messages : [];
+  if (!shaped.profile) shaped.profile = structuredClone(core.DEFAULT_PROFILE);
+  if (!shaped.providers) shaped.providers = {};
+  if (!Array.isArray(shaped.capitalWatchlist)) shaped.capitalWatchlist = [];
+  return shaped;
+}
+
+function loadScopedWorkspace(uid = window.AetherCore?.activeUid() || "guest") {
+  window.AetherCore?.setActiveUid(uid);
+  const demo = uid === "guest";
+  const stored = readScoped("workspace", null);
+  if (demo) {
+    systemData = normalizeSystemData(stored || window.AetherCore.demoWorkspace(), { demo: true });
+  } else if (stored && typeof stored === "object") {
+    systemData = normalizeSystemData(stored, { demo: false });
+  } else {
+    systemData = normalizeSystemData(window.AetherCore.emptyWorkspace(), { demo: false });
+  }
+  const storedCourses = readScoped("courses", null);
+  if (demo) {
+    if (!storedCourses) {
+      /* keep defaultCourses for demo richness */
+    } else {
+      courses = storedCourses;
+    }
+  } else if (Array.isArray(storedCourses) && storedCourses.length) {
+    courses = storedCourses;
+  } else {
+    courses = window.AetherCore.emptyCourses();
+  }
+  state.courseId = readScoped("courseId", courses[0]?.id) || courses[0]?.id;
+  selectedSystemContact = systemData.contacts.find(contact => contact.id !== "c1")?.id || systemData.contacts[0]?.id || "c1";
+  selectedOpportunity = systemData.opportunities[0]?.id || null;
+  mailSelectedId = systemData.mail.messages[0]?.id || null;
+  networkFilterMode = ["all", "company", "person"].includes(readScoped("networkMode", "person")) ? readScoped("networkMode", "person") : "person";
+  networkFilterCompany = readScoped("networkCompany", "") || "";
+  networkFilterPerson = readScoped("networkPerson", selectedSystemContact) || selectedSystemContact;
+  tabPreferences = { ...defaultTabPreferences, ...readScoped("tabs", systemData.profile?.tabs || {}) };
+  themePreferences = { ...themePresets.charcoal, ...readScoped("theme", {}) };
+  if (systemData.profile?.accent) themePreferences.accent = systemData.profile.accent;
+  if (systemData.profile?.baseTheme) themePreferences.baseTheme = systemData.profile.baseTheme;
+  window.AetherCore?.applyDocumentTheme(systemData.profile || {});
+  window.systemData = systemData;
+  return systemData;
+}
+
 let systemData;
-try { systemData = JSON.parse(localStorage.getItem("brain-os-v3")) || structuredClone(systemSeed); } catch { systemData = structuredClone(systemSeed); }
-["contacts", "links", "opportunities", "events", "health", "transactions", "subscriptions", "goals", "mailSuggestions"].forEach(key => { if (!Array.isArray(systemData[key])) systemData[key] = structuredClone(systemSeed[key]); });
-if (!systemData.mail || typeof systemData.mail !== "object") systemData.mail = structuredClone(systemSeed.mail);
-systemData.mail.connection = { ...systemSeed.mail.connection, ...(systemData.mail.connection || {}) };
-systemData.mail.connection.connected = false;
-systemData.mail.preferences = { ...systemSeed.mail.preferences, ...(systemData.mail.preferences || {}) };
-if (!Array.isArray(systemData.mail.messages)) systemData.mail.messages = structuredClone(systemSeed.mail.messages);
-let selectedSystemContact = systemData.contacts.find(contact => contact.id !== "c1")?.id || "c1";
-let selectedOpportunity = systemData.opportunities[0]?.id || null;
+let selectedSystemContact = "c1";
+let selectedOpportunity = null;
 let opportunityQuery = "";
 let opportunityIndustry = "all";
 let opportunityPosition = "all";
 let opportunityType = "all";
-let networkFilterMode = ["all", "company", "person"].includes(localStorage.getItem("aetherNetworkMode")) ? localStorage.getItem("aetherNetworkMode") : "all";
-let networkFilterCompany = localStorage.getItem("aetherNetworkCompany") || "";
-let networkFilterPerson = localStorage.getItem("aetherNetworkPerson") || selectedSystemContact;
+let networkFilterMode = "person";
+let networkFilterCompany = "";
+let networkFilterPerson = "c1";
 let systemCalendarView = "week";
 let systemCalendarDate = systemToday;
 let homeDayPeriod = "all";
-let mailSelectedId = systemData.mail.messages[0]?.id || null;
+let mailSelectedId = null;
 let mailFilter = "all";
 let mailQuery = "";
 let cloudSyncEnabled = false;
 let cloudHydrating = false;
 let cloudSaveTimer = null;
+loadScopedWorkspace(localStorage.getItem("aetherActiveUid") || "guest");
+
 const saveSystemData = () => {
-  localStorage.setItem("brain-os-v3", JSON.stringify(systemData));
+  writeScoped("workspace", systemData);
+  localStorage.removeItem("brain-os-v3");
+  window.systemData = systemData;
   scheduleCloudSave();
 };
+window.saveSystemData = saveSystemData;
+window.systemData = systemData;
 const saveNetworkFilter = () => {
-  localStorage.setItem("aetherNetworkMode", networkFilterMode);
-  localStorage.setItem("aetherNetworkCompany", networkFilterCompany);
-  localStorage.setItem("aetherNetworkPerson", networkFilterPerson);
+  writeScoped("networkMode", networkFilterMode);
+  writeScoped("networkCompany", networkFilterCompany);
+  writeScoped("networkPerson", networkFilterPerson);
   scheduleCloudSave();
 };
+
+window.AetherWorkspaceLoad = loadScopedWorkspace;
 
 function aetherWorkspaceSnapshot() {
   return {
     courses,
     systemData,
-    preferences: { tabs: tabPreferences, theme: themePreferences },
+    preferences: { tabs: tabPreferences, theme: themePreferences, profile: systemData.profile },
     navigation: {
       courseId: state.courseId,
       networkFilterMode,
@@ -612,30 +679,29 @@ function hydrateAetherWorkspace(snapshot) {
   if (!snapshot || typeof snapshot !== "object") return false;
   cloudHydrating = true;
   if (Array.isArray(snapshot.courses) && snapshot.courses.length) courses = snapshot.courses;
-  if (snapshot.systemData && typeof snapshot.systemData === "object") systemData = snapshot.systemData;
-  ["contacts", "links", "opportunities", "events", "health", "transactions", "subscriptions", "goals", "mailSuggestions"].forEach(key => {
-    if (!Array.isArray(systemData[key])) systemData[key] = structuredClone(systemSeed[key]);
-  });
-  if (!systemData.mail || typeof systemData.mail !== "object") systemData.mail = structuredClone(systemSeed.mail);
-  systemData.mail.connection = { ...systemSeed.mail.connection, ...(systemData.mail.connection || {}), connected: false, calendarError: "" };
-  systemData.mail.preferences = { ...systemSeed.mail.preferences, ...(systemData.mail.preferences || {}) };
-  if (!Array.isArray(systemData.mail.messages)) systemData.mail.messages = structuredClone(systemSeed.mail.messages);
-  tabPreferences = { ...defaultTabPreferences, ...(snapshot.preferences?.tabs || {}) };
-  themePreferences = { ...themePresets.forest, ...(snapshot.preferences?.theme || {}) };
+  if (snapshot.systemData && typeof snapshot.systemData === "object") {
+    systemData = normalizeSystemData(snapshot.systemData, { demo: false });
+  }
+  window.AetherModules?.ensureShape?.(systemData);
+  tabPreferences = { ...defaultTabPreferences, ...(snapshot.preferences?.tabs || systemData.profile?.tabs || {}) };
+  themePreferences = { ...themePresets.charcoal, ...(snapshot.preferences?.theme || {}) };
+  if (systemData.profile?.accent) themePreferences.accent = systemData.profile.accent;
   state.courseId = courses.some(course => course.id === snapshot.navigation?.courseId) ? snapshot.navigation.courseId : courses[0]?.id;
-  networkFilterMode = ["all", "company", "person"].includes(snapshot.navigation?.networkFilterMode) ? snapshot.navigation.networkFilterMode : "all";
+  networkFilterMode = ["all", "company", "person"].includes(snapshot.navigation?.networkFilterMode) ? snapshot.navigation.networkFilterMode : "person";
   networkFilterCompany = snapshot.navigation?.networkFilterCompany || "";
   networkFilterPerson = snapshot.navigation?.networkFilterPerson || systemData.contacts[0]?.id || "";
   selectedSystemContact = systemData.contacts.some(contact => contact.id === selectedSystemContact) ? selectedSystemContact : systemData.contacts[0]?.id;
   mailSelectedId = systemData.mail.messages.some(message => message.id === mailSelectedId) ? mailSelectedId : systemData.mail.messages[0]?.id || null;
-  localStorage.setItem("academicOsCourses", JSON.stringify(courses));
-  localStorage.setItem("academicOsCourse", state.courseId);
-  localStorage.setItem("brain-os-v3", JSON.stringify(systemData));
-  localStorage.setItem("aetherVisibleTabs", JSON.stringify(tabPreferences));
-  localStorage.setItem("aetherTheme", JSON.stringify(themePreferences));
-  localStorage.setItem("aetherNetworkMode", networkFilterMode);
-  localStorage.setItem("aetherNetworkCompany", networkFilterCompany);
-  localStorage.setItem("aetherNetworkPerson", networkFilterPerson);
+  writeScoped("courses", courses);
+  writeScoped("courseId", state.courseId);
+  writeScoped("workspace", systemData);
+  writeScoped("tabs", tabPreferences);
+  writeScoped("theme", themePreferences);
+  writeScoped("networkMode", networkFilterMode);
+  writeScoped("networkCompany", networkFilterCompany);
+  writeScoped("networkPerson", networkFilterPerson);
+  window.systemData = systemData;
+  window.AetherCore?.applyDocumentTheme(systemData.profile || {});
   applyTheme();
   applyTabPreferences();
   renderWorkspace();
@@ -654,7 +720,11 @@ window.AetherWorkspace = {
   enableCloudSync() { cloudSyncEnabled = true; },
   disableCloudSync() { cloudSyncEnabled = false; clearTimeout(cloudSaveTimer); },
   saveNow: saveCloudWorkspaceNow,
-  setSyncLabel: setCloudSyncLabel
+  setSyncLabel: setCloudSyncLabel,
+  loadScoped: loadScopedWorkspace,
+  resetSessionState() {
+    window.AetherModules?.resetCapitalLock?.();
+  }
 };
 const systemId = prefix => `${prefix}${Date.now()}${Math.floor(Math.random() * 99)}`;
 const niceSystemDate = value => new Date(`${value}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -690,7 +760,7 @@ function renderNetworkingDashboard() {
     });
     edges = visibleContacts.map(contact => `<line class="company-branch" x1="50%" y1="20%" x2="${positions[contact.id].x}%" y2="${positions[contact.id].y}%"></line>`).join("");
     companyNode = `<div class="network-company-node" style="left:50%;top:20%"><span>${systemInitials(networkFilterCompany)}</span><strong>${escapeHtml(networkFilterCompany)}</strong><small>${visibleContacts.length} ${visibleContacts.length === 1 ? "person" : "people"}</small></div>`;
-    viewLabel = `${networkFilterCompany} family tree`;
+    viewLabel = `${networkFilterCompany} network`;
     if (!visibleContacts.some(contact => contact.id === selectedSystemContact)) selectedSystemContact = visibleContacts[0]?.id;
   }
 
@@ -723,7 +793,9 @@ function renderNetworkingDashboard() {
   if (!visibleOpportunities.some(item => item.id === selectedOpportunity)) selectedOpportunity = visibleOpportunities[0]?.id || null;
   const activeOpportunity = systemData.opportunities.find(item => item.id === selectedOpportunity);
   const opportunityCards = visibleOpportunities.map(item => `<button class="opportunity-card ${item.id === selectedOpportunity ? "active" : ""}" data-opportunity="${item.id}" type="button"><span class="opportunity-mark">${systemInitials(item.company)}</span><span class="opportunity-card-copy"><span class="opportunity-card-top"><strong>${escapeHtml(item.title)}</strong><i>${escapeHtml(item.status)}</i></span><span>${escapeHtml(item.company)} · ${escapeHtml(item.location)}</span><small>${escapeHtml(item.industry)} · ${escapeHtml(item.type)} · ${escapeHtml(item.workMode)}</small></span></button>`).join("");
-  root.innerHTML = systemHeader("RELATIONSHIP INTELLIGENCE", "Networking", "See your full relationship map, company families, or every connection branching from one person.", [[systemData.contacts.length - 1, "CONTACTS"], [companies.length, "COMPANIES"], [systemData.opportunities.length, "OPPORTUNITIES"]]) + `<section class="system-split network-workspace"><div class="collection-panel"><div class="panel-heading network-panel-heading"><div><p class="kicker">DNA FAMILY TREE</p><h2>Relationship graph</h2></div><button class="text-button" data-add-contact type="button">+ Add contact</button></div><div class="network-filter-bar"><div class="segmented network-mode-tabs" aria-label="Filter relationship graph">${[["all", "Full network"], ["company", "By company"], ["person", "By person"]].map(([mode, label]) => `<button class="segment ${networkFilterMode === mode ? "active" : ""}" data-network-mode="${mode}" type="button">${label}</button>`).join("")}</div>${filterControl}</div><div class="network-map"><div class="network-map-caption"><span>${escapeHtml(viewLabel)}</span><small>${visibleContacts.length} visible nodes</small></div><svg aria-hidden="true">${edges}</svg>${companyNode}${nodes}${!visibleContacts.length ? `<div class="network-empty">No people are assigned to this company yet.</div>` : ""}</div></div><aside class="collection-panel contact-detail">${selected ? `<div class="contact-title"><span class="course-swatch">${systemInitials(selected.name)}</span><div><h2>${escapeHtml(selected.name)}</h2><p>${escapeHtml(selected.role)} · ${escapeHtml(selected.org)}</p></div></div><div class="tag-row">${(selected.tags || []).map(tag => `<span class="status-pill">${escapeHtml(tag)}</span>`).join("")}</div><div class="system-section"><p class="kicker">KEY NOTES</p><p>${escapeHtml(selected.notes || "No notes yet.")}</p></div><div class="system-section"><p class="kicker">INTERACTION LOG</p>${selected.logs?.length ? selected.logs.map(log => `<div class="compact-row"><strong>${escapeHtml(log.type)}</strong><span>${escapeHtml(log.date)} · ${escapeHtml(log.note)}</span></div>`).join("") : "<p>No interactions recorded.</p>"}</div><div class="system-section"><p class="kicker">DIRECT BRANCHES</p><p>${direct.map(contact => escapeHtml(contact.name)).join(" · ") || "No direct branches"}</p><p>Influence depth ${selected.influence}/5</p></div><div class="context-record-actions"><button class="button secondary" data-edit-contact="${selected.id}" type="button">Edit</button><button class="button secondary" data-log-contact="${selected.id}" type="button">Log interaction</button>${selected.id !== "c1" ? `<button class="button danger" data-delete-contact="${selected.id}" type="button">Delete</button>` : ""}</div>` : "<div class='empty-list'>Add a contact to begin your graph.</div>"}</aside></section><section class="opportunities-section"><div class="opportunities-heading"><div><p class="kicker">OPPORTUNITIES</p><h2>Job and internship search</h2><p>Search your pipeline by industry, position, or opportunity type.</p></div><button class="button secondary" data-add-opportunity type="button">+ Add opportunity</button></div><div class="opportunity-filters"><label class="opportunity-search"><span class="search-icon" aria-hidden="true"></span><input data-opportunity-search type="search" value="${escapeHtml(opportunityQuery)}" placeholder="Search company, role, location, or keyword"></label><label><span>Industry</span><select data-opportunity-industry><option value="all">All industries</option>${opportunityIndustries.map(value => `<option value="${escapeHtml(value)}" ${value === opportunityIndustry ? "selected" : ""}>${escapeHtml(value)}</option>`).join("")}</select></label><label><span>Position</span><select data-opportunity-position><option value="all">All positions</option>${opportunityPositions.map(value => `<option value="${escapeHtml(value)}" ${value === opportunityPosition ? "selected" : ""}>${escapeHtml(value)}</option>`).join("")}</select></label><label><span>Type</span><select data-opportunity-type><option value="all">All types</option>${["Internship", "Full time", "Part time", "Externship"].map(value => `<option value="${value}" ${value === opportunityType ? "selected" : ""}>${value}</option>`).join("")}</select></label></div><div class="system-split opportunity-workspace"><div class="collection-panel opportunity-results"><div class="opportunity-results-heading"><span><strong>${visibleOpportunities.length}</strong> matching opportunities</span>${visibleOpportunities.length !== systemData.opportunities.length ? `<button class="text-button" data-clear-opportunity-filters type="button">Clear filters</button>` : ""}</div><div class="opportunity-list">${opportunityCards || `<div class="opportunity-empty"><strong>No matches found</strong><span>Try changing a filter or add a new opportunity.</span></div>`}</div></div><aside class="collection-panel opportunity-detail">${activeOpportunity ? `<div class="opportunity-detail-heading"><span class="opportunity-mark large">${systemInitials(activeOpportunity.company)}</span><div><span class="status-pill">${escapeHtml(activeOpportunity.status)}</span><h2>${escapeHtml(activeOpportunity.title)}</h2><p>${escapeHtml(activeOpportunity.company)}</p></div></div><div class="opportunity-facts"><div><span>INDUSTRY</span><strong>${escapeHtml(activeOpportunity.industry)}</strong></div><div><span>POSITION</span><strong>${escapeHtml(activeOpportunity.position)}</strong></div><div><span>LOCATION</span><strong>${escapeHtml(activeOpportunity.location)}</strong></div><div><span>TYPE</span><strong>${escapeHtml(activeOpportunity.type)} · ${escapeHtml(activeOpportunity.workMode)}</strong></div></div><div class="system-section"><p class="kicker">ROLE OVERVIEW</p><p>${escapeHtml(activeOpportunity.description || "No description yet.")}</p></div><div class="system-section"><p class="kicker">QUALIFICATIONS</p><div class="tag-row">${(activeOpportunity.qualifications || []).map(item => `<span class="status-pill">${escapeHtml(item)}</span>`).join("") || "<p>No qualifications added.</p>"}</div></div><div class="system-section"><p class="kicker">NEXT MOVE</p><p>${escapeHtml(activeOpportunity.notes || "Add a next step for this opportunity.")}</p><p class="opportunity-source">Source · ${escapeHtml(activeOpportunity.source || "Not set")}${activeOpportunity.deadline ? ` · Deadline ${niceSystemDate(activeOpportunity.deadline)}` : ""}</p></div><div class="context-record-actions">${activeOpportunity.link ? `<a class="button" href="${escapeHtml(activeOpportunity.link)}" target="_blank" rel="noreferrer">View role</a>` : ""}<button class="button secondary" data-edit-opportunity="${activeOpportunity.id}" type="button">Edit</button><button class="button danger" data-delete-opportunity="${activeOpportunity.id}" type="button">Delete</button></div>` : `<div class="empty-list">Select an opportunity to see its details.</div>`}</aside></div></section>`;
+  root.innerHTML = systemHeader("NETWORK", "Network", "You at the center. Filter by person, company, school, sport, opportunity, influence, or last contacted.", [[systemData.contacts.length - 1, "CONTACTS"], [companies.length, "COMPANIES"], [systemData.opportunities.length, "OPPORTUNITIES"]]) + (window.AetherModules?.renderReviewQueue?.(root) || "") + `<section class="system-split network-workspace"><div class="collection-panel"><div class="panel-heading network-panel-heading"><div><p class="kicker">GRAPH</p><h2>Relationship map</h2></div><button class="text-button" data-add-contact type="button">+ Add contact</button></div><div class="network-filter-bar"><div class="segmented network-mode-tabs" aria-label="Filter relationship graph">${[["person", "By person"], ["company", "By company"], ["all", "Overview"]].map(([mode, label]) => `<button class="segment ${networkFilterMode === mode ? "active" : ""}" data-network-mode="${mode}" type="button">${label}</button>`).join("")}</div>${filterControl}</div><div class="network-map"><div class="network-map-caption"><span>${escapeHtml(viewLabel)}</span><small>${visibleContacts.length} visible · drag nodes · scroll to zoom</small></div><svg aria-hidden="true">${edges}</svg>${companyNode}${nodes}${!visibleContacts.length ? `<div class="network-empty">No people are assigned to this company yet.</div>` : ""}</div></div><aside class="collection-panel contact-detail">${selected ? `<div class="contact-title"><span class="course-swatch">${systemInitials(selected.name)}</span><div><h2>${escapeHtml(selected.name)}</h2><p>${escapeHtml(selected.role)} · ${escapeHtml(selected.org)}</p></div></div><div class="tag-row">${(selected.tags || []).map(tag => `<span class="status-pill">${escapeHtml(tag)}</span>`).join("")}</div><div class="system-section"><p class="kicker">KEY NOTES</p><p>${escapeHtml(selected.notes || "No notes yet.")}</p></div><div class="system-section"><p class="kicker">INTERACTION LOG</p>${selected.logs?.length ? selected.logs.map(log => `<div class="compact-row"><strong>${escapeHtml(log.type)}</strong><span>${escapeHtml(log.date)} · ${escapeHtml(log.note)}</span></div>`).join("") : "<p>No interactions recorded.</p>"}</div><div class="system-section"><p class="kicker">DIRECT BRANCHES</p><p>${direct.map(contact => escapeHtml(contact.name)).join(" · ") || "No direct branches"}</p><p>Influence depth ${selected.influence}/5</p></div><div class="context-record-actions"><button class="button secondary" data-edit-contact="${selected.id}" type="button">Edit</button><button class="button secondary" data-log-contact="${selected.id}" type="button">Log interaction</button>${selected.id !== "c1" ? `<button class="button danger" data-delete-contact="${selected.id}" type="button">Delete</button>` : ""}</div>` : "<div class='empty-list'>Add a contact to begin your graph.</div>"}</aside></section><section class="opportunities-section"><div class="opportunities-heading"><div><p class="kicker">OPPORTUNITIES</p><h2>Job and internship search</h2><p>Search your pipeline by industry, position, or opportunity type.</p></div><button class="button secondary" data-add-opportunity type="button">+ Add opportunity</button></div><div class="opportunity-filters"><label class="opportunity-search"><span class="search-icon" aria-hidden="true"></span><input data-opportunity-search type="search" value="${escapeHtml(opportunityQuery)}" placeholder="Search company, role, location, or keyword"></label><label><span>Industry</span><select data-opportunity-industry><option value="all">All industries</option>${opportunityIndustries.map(value => `<option value="${escapeHtml(value)}" ${value === opportunityIndustry ? "selected" : ""}>${escapeHtml(value)}</option>`).join("")}</select></label><label><span>Position</span><select data-opportunity-position><option value="all">All positions</option>${opportunityPositions.map(value => `<option value="${escapeHtml(value)}" ${value === opportunityPosition ? "selected" : ""}>${escapeHtml(value)}</option>`).join("")}</select></label><label><span>Type</span><select data-opportunity-type><option value="all">All types</option>${["Internship", "Full time", "Part time", "Externship"].map(value => `<option value="${value}" ${value === opportunityType ? "selected" : ""}>${value}</option>`).join("")}</select></label></div><div class="system-split opportunity-workspace"><div class="collection-panel opportunity-results"><div class="opportunity-results-heading"><span><strong>${visibleOpportunities.length}</strong> matching opportunities</span>${visibleOpportunities.length !== systemData.opportunities.length ? `<button class="text-button" data-clear-opportunity-filters type="button">Clear filters</button>` : ""}</div><div class="opportunity-list">${opportunityCards || `<div class="opportunity-empty"><strong>No matches found</strong><span>Try changing a filter or add a new opportunity.</span></div>`}</div></div><aside class="collection-panel opportunity-detail">${activeOpportunity ? `<div class="opportunity-detail-heading"><span class="opportunity-mark large">${systemInitials(activeOpportunity.company)}</span><div><span class="status-pill">${escapeHtml(activeOpportunity.status)}</span><h2>${escapeHtml(activeOpportunity.title)}</h2><p>${escapeHtml(activeOpportunity.company)}</p></div></div><div class="opportunity-facts"><div><span>INDUSTRY</span><strong>${escapeHtml(activeOpportunity.industry)}</strong></div><div><span>POSITION</span><strong>${escapeHtml(activeOpportunity.position)}</strong></div><div><span>LOCATION</span><strong>${escapeHtml(activeOpportunity.location)}</strong></div><div><span>TYPE</span><strong>${escapeHtml(activeOpportunity.type)} · ${escapeHtml(activeOpportunity.workMode)}</strong></div></div><div class="system-section"><p class="kicker">ROLE OVERVIEW</p><p>${escapeHtml(activeOpportunity.description || "No description yet.")}</p></div><div class="system-section"><p class="kicker">QUALIFICATIONS</p><div class="tag-row">${(activeOpportunity.qualifications || []).map(item => `<span class="status-pill">${escapeHtml(item)}</span>`).join("") || "<p>No qualifications added.</p>"}</div></div><div class="system-section"><p class="kicker">NEXT MOVE</p><p>${escapeHtml(activeOpportunity.notes || "Add a next step for this opportunity.")}</p><p class="opportunity-source">Source · ${escapeHtml(activeOpportunity.source || "Not set")}${activeOpportunity.deadline ? ` · Deadline ${niceSystemDate(activeOpportunity.deadline)}` : ""}</p></div><div class="context-record-actions">${activeOpportunity.link ? `<a class="button" href="${escapeHtml(activeOpportunity.link)}" target="_blank" rel="noreferrer">View role</a>` : ""}<button class="button secondary" data-edit-opportunity="${activeOpportunity.id}" type="button">Edit</button><button class="button danger" data-delete-opportunity="${activeOpportunity.id}" type="button">Delete</button></div>` : `<div class="empty-list">Select an opportunity to see its details.</div>`}</aside></div></section>`;
+  window.AetherModules?.bindReviewQueue?.(root);
+  window.AetherModules?.enhanceNetworkInteractivity?.(root);
   root.querySelectorAll("[data-contact-node]").forEach(button => button.addEventListener("click", () => { selectedSystemContact = button.dataset.contactNode; renderNetworkingDashboard(); }));
   root.querySelectorAll("[data-network-mode]").forEach(button => button.addEventListener("click", () => { networkFilterMode = button.dataset.networkMode; if (networkFilterMode === "person") selectedSystemContact = networkFilterPerson; if (networkFilterMode === "company") selectedSystemContact = systemData.contacts.find(contact => contact.org === networkFilterCompany)?.id; saveNetworkFilter(); renderNetworkingDashboard(); }));
   root.querySelector("[data-network-company]")?.addEventListener("change", event => { networkFilterCompany = event.currentTarget.value; selectedSystemContact = systemData.contacts.find(contact => contact.org === networkFilterCompany)?.id; saveNetworkFilter(); renderNetworkingDashboard(); });
@@ -797,8 +869,12 @@ function renderCalendarDashboard() {
   const calendarSyncTime = googleConnection.calendarLastSync ? new Date(googleConnection.calendarLastSync).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
   const googleCalendarStatus = `<section class="google-calendar-status ${googleConnection.calendarError ? "has-error" : googleConnection.connected ? "is-connected" : ""}"><div class="google-calendar-mark" aria-hidden="true">G</div><div class="google-calendar-copy"><p class="kicker">GOOGLE CALENDAR</p><h2>${googleConnection.calendarError ? "Calendar sync needs attention" : googleConnection.connected ? `${googleEvents.length} Google event${googleEvents.length === 1 ? "" : "s"} synced` : "Connect your Google Calendar"}</h2><p>${googleConnection.calendarError ? escapeHtml(googleConnection.calendarError) : googleConnection.connected ? `${googleConnection.calendarCount || 1} calendar${googleConnection.calendarCount === 1 ? "" : "s"} connected${calendarSyncTime ? ` · Updated ${calendarSyncTime}` : " · Syncing now"}` : "Bring events from every selected Google calendar into this schedule."}</p></div><button class="button ${googleConnection.connected && !googleConnection.calendarError ? "secondary" : "primary"}" ${googleConnection.connected && !googleConnection.calendarError ? "data-calendar-sync" : "data-google-connect"} type="button">${googleConnection.calendarError ? "Reconnect Google" : googleConnection.connected ? "Sync now" : "Connect Google"}</button></section>`;
   const mailAutomation = `<section class="calendar-mail-automation"><div class="calendar-automation-heading"><div><span class="mail-spark">✦</span><div><p class="kicker">MAIL → CALENDAR</p><h2>${pendingMail.length ? `${pendingMail.length} event${pendingMail.length === 1 ? "" : "s"} ready for review` : "Inbox events are up to date"}</h2><p>${systemData.mail.preferences.calendarMode === "auto" ? "New event details are added automatically and remain editable." : "Review parsed details before anything is written to your calendar."}</p></div></div><div class="automation-mode" role="group" aria-label="Mail calendar automation"><button class="${systemData.mail.preferences.calendarMode === "semi" ? "active" : ""}" data-mail-calendar-mode="semi" type="button">Ask first</button><button class="${systemData.mail.preferences.calendarMode === "auto" ? "active" : ""}" data-mail-calendar-mode="auto" type="button">Automatic</button></div></div>${pendingMail.length ? `<div class="calendar-proposal-list">${pendingMail.map(item => `<article><div class="proposal-date"><strong>${Number(item.date.slice(-2))}</strong><span>${new Date(`${item.date}T12:00:00`).toLocaleDateString("en-US", { month: "short" }).toUpperCase()}</span></div><div class="proposal-copy"><span><em>${item.confidence}% confident</em><i>${escapeHtml(item.priority)} priority</i></span><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.start)}–${escapeHtml(item.end)} · from ${escapeHtml(senderName(item.sender))}</p></div><div class="proposal-actions"><button class="button secondary" data-edit-mail-proposal="${item.id}" type="button">Edit</button><button class="text-button proposal-dismiss" data-dismiss-mail-proposal="${item.id}" type="button">Dismiss</button><button class="button primary" data-approve-mail-proposal="${item.id}" type="button">Add to Calendar</button></div></article>`).join("")}</div>` : ""}</section>`;
-  root.innerHTML = systemHeader("COMMAND YOUR TIME", "Calendar", "One editable schedule assembled from Google Calendar, academics, athletics, mail, health, and relationships.", [[visible.length, "IN VIEW"], [systemData.events.filter(event => event.priority === "high").length, "HIGH PRIORITY"], [googleConnection.calendarCount || 0, "GOOGLE CALENDARS"]]) + googleCalendarStatus + mailAutomation + `<section class="collection-panel calendar-shell"><div class="calendar-toolbar"><div><p class="kicker">${systemCalendarView === "month" ? new Date(`${systemCalendarDate}T12:00:00`).toLocaleDateString("en-US", { month: "long", year: "numeric" }).toUpperCase() : `${niceSystemDate(range[0])}${range.length > 1 ? ` — ${niceSystemDate(range.at(-1))}` : ""}`}</p><h2>Your schedule</h2></div><div class="calendar-controls"><button class="button secondary" data-calendar-step="-1" type="button">‹</button><button class="button secondary" data-calendar-today type="button">Today</button><button class="button secondary" data-calendar-step="1" type="button">›</button><div class="segmented">${[["day", "1-Day"], ["3day", "3-Day"], ["week", "Week"], ["month", "Month"]].map(([value, label]) => `<button class="segment ${systemCalendarView === value ? "active" : ""}" data-calendar-view="${value}" type="button">${label}</button>`).join("")}</div></div></div><div class="calendar-content">${surface}<aside class="daily-brief"><p class="kicker">DAILY BRIEF · ${niceSystemDate(systemCalendarDate)}</p><h2>${dayEvents.length ? "Your commitments at a glance" : "A clear day to shape"}</h2><p>${dayEvents.length} commitments · ${dayEvents.filter(event => event.priority === "high").length} high priority</p>${dayEvents.slice(0, 4).map(event => `<button data-calendar-event="${event.id}" type="button"><strong>${escapeHtml(event.title)}</strong><span>${escapeHtml(event.start)} · ${escapeHtml(event.zone)}</span></button>`).join("") || "<div class='empty-list'>No events scheduled.</div>"}</aside></div></section>`;
+  root.innerHTML = systemHeader("COMMAND YOUR TIME", "Calendar", "One editable schedule assembled from Google Calendar, academics, athletics, mail, health, and relationships.", [[visible.length, "IN VIEW"], [systemData.events.filter(event => event.priority === "high").length, "HIGH PRIORITY"], [googleConnection.calendarCount || 0, "GOOGLE CALENDARS"]]) + googleCalendarStatus + mailAutomation + `<section class="collection-panel calendar-shell"><div class="calendar-toolbar"><div><p class="kicker">${systemCalendarView === "month" ? new Date(`${systemCalendarDate}T12:00:00`).toLocaleDateString("en-US", { month: "long", year: "numeric" }).toUpperCase() : `${niceSystemDate(range[0])}${range.length > 1 ? ` — ${niceSystemDate(range.at(-1))}` : ""}`}</p><h2>Your schedule</h2></div><div class="calendar-controls"><label class="button secondary">Import ICS/CSV<input id="calendarAthleticImport" type="file" accept=".ics,.csv" hidden></label><button class="button secondary" data-calendar-step="-1" type="button">‹</button><button class="button secondary" data-calendar-today type="button">Today</button><button class="button secondary" data-calendar-step="1" type="button">›</button><div class="segmented">${[["day", "1-Day"], ["3day", "3-Day"], ["week", "Week"], ["month", "Month"]].map(([value, label]) => `<button class="segment ${systemCalendarView === value ? "active" : ""}" data-calendar-view="${value}" type="button">${label}</button>`).join("")}</div></div></div><div class="calendar-content">${surface}<aside class="daily-brief"><p class="kicker">DAILY BRIEF · ${niceSystemDate(systemCalendarDate)}</p><h2>${dayEvents.length ? "Your commitments at a glance" : "A clear day to shape"}</h2><p>${dayEvents.length} commitments · ${dayEvents.filter(event => event.priority === "high").length} high priority</p>${dayEvents.slice(0, 4).map(event => `<button data-calendar-event="${event.id}" type="button"><strong>${escapeHtml(event.title)}</strong><span>${escapeHtml(event.start)} · ${escapeHtml(event.zone)}</span></button>`).join("") || "<div class='empty-list'>No events scheduled.</div>"}</aside></div></section>`;
   root.querySelector("[data-google-connect]")?.addEventListener("click", connectMail);
+  root.querySelector("#calendarAthleticImport")?.addEventListener("change", event => {
+    const file = event.target.files?.[0];
+    if (file) window.AetherModules?.importAthleticSchedule?.(file);
+  });
   root.querySelector("[data-calendar-sync]")?.addEventListener("click", () => syncGoogleWorkspace(false));
   root.querySelectorAll("[data-calendar-view]").forEach(button => button.addEventListener("click", () => { systemCalendarView = button.dataset.calendarView; renderCalendarDashboard(); }));
   root.querySelectorAll("[data-calendar-step]").forEach(button => button.addEventListener("click", () => { const date = new Date(`${systemCalendarDate}T12:00:00`), direction = Number(button.dataset.calendarStep); if (systemCalendarView === "month") date.setMonth(date.getMonth() + direction); else date.setDate(date.getDate() + direction * (systemCalendarView === "week" ? 7 : systemCalendarView === "3day" ? 3 : 1)); systemCalendarDate = date.toISOString().slice(0, 10); renderCalendarDashboard(); }));
@@ -830,11 +906,42 @@ function eventRecordForm(id = null, date = systemCalendarDate) {
 }
 
 function renderHealthDashboard() {
-  const root = $("#healthDashboard"), latest = systemData.health[0] || { recovery: 0, exertion: 0, load: 0, sleep: 0, hr: 0, workout: "No workout", provider: "Manual" }, low = latest.recovery < 65;
-  root.innerHTML = systemHeader("HEALTH & PERFORMANCE", "Health & performance", "Recovery, exertion, training load, sleep, and heart-rate context in one view.", [[latest.recovery, "RECOVERY"], [latest.exertion, "EXERTION"], [latest.load, "TRAINING LOAD"]]) + `<section class="metric-grid"><article class="metric-card recovery-card"><div><p class="kicker">RECOVERY</p><span class="status-pill">${escapeHtml(latest.provider)}</span></div><div class="recovery-ring" style="--recovery:${latest.recovery}"><strong>${latest.recovery}</strong><small>/100</small></div><p class="${low ? "warning-copy" : "positive-copy"}">${low ? "Below baseline" : "Ready for planned load"}</p></article>${[["DAILY EXERTION", latest.exertion, "/10"], ["TRAINING LOAD", latest.load, "7-day"], ["SLEEP", latest.sleep, "hours"], ["RESTING HR", latest.hr, "bpm"]].map(([label, value, unit]) => `<article class="metric-card"><p class="kicker">${label}</p><h2>${value}<small>${unit}</small></h2><div class="metric-meter"><i style="width:${Math.min(100, Number(value) / (label === "TRAINING LOAD" ? 10 : label === "RESTING HR" ? 1 : .1))}%"></i></div></article>`).join("")}<article class="recovery-alert ${low ? "low" : ""}"><div><p class="kicker">AUTOMATED COACH</p><h2>${low ? "Protect recovery today" : "Schedule is aligned"}</h2><p>${low ? "Keep required commitments, reduce optional intensity, and add a reset window." : "No calendar changes are suggested."}</p></div>${low ? '<button class="button primary" data-apply-recovery type="button">Apply calendar adjustment</button>' : ""}</article></section><section class="collection-panel health-log"><div class="panel-heading"><div><p class="kicker">RECENT LOAD</p><h2>Performance log</h2></div><button class="text-button" data-add-health type="button">+ Log metrics</button></div>${systemData.health.map(item => `<button class="system-data-row" data-health-record="${item.id}" type="button"><span class="health-score ${item.recovery < 65 ? "low" : ""}">${item.recovery}</span><span><strong>${escapeHtml(item.workout)}</strong><small>${niceSystemDate(item.date)} · ${escapeHtml(item.provider)}</small></span><span><strong>${item.exertion}</strong><small>exertion</small></span><b>›</b></button>`).join("")}</section>`;
-  root.querySelector("[data-add-health]").addEventListener("click", () => healthRecordForm());
+  const root = $("#healthDashboard");
+  const latest = systemData.health[0];
+  const providers = [
+    { id: "strava", name: "Strava", blurb: "Activities, effort, and training load via OAuth popup." },
+    { id: "fitbit", name: "Fitbit", blurb: "Sleep, HR, and daily summaries." },
+    { id: "apple", name: "Apple Health", blurb: "Requires iOS companion bridge — listed so athletes know the roadmap." },
+    { id: "garmin", name: "Garmin", blurb: "Connect when Functions credentials are configured." }
+  ];
+  const goals = systemData.athleteGoals || [];
+  const sportGoal = goals.find(g => g.type === "sport");
+  const low = latest && latest.recovery < 65;
+  const suggestion = !latest ? "Connect a provider to unlock coaching." : low
+    ? (sportGoal ? `Recovery is low relative to your goal “${sportGoal.title}”. Suggest technique-only training and a recovery block.` : "Recovery is low. Add a sport goal so coaching can target it, or apply a light calendar adjustment.")
+    : "Schedule looks aligned with readiness.";
+  root.innerHTML = systemHeader("HEALTH & PERFORMANCE", "Health", "Autonomous provider sync with suggest → apply coaching against your goals.", [[latest?.recovery ?? "—", "RECOVERY"], [latest?.exertion ?? "—", "EXERTION"], [latest?.load ?? "—", "LOAD"]]) +
+    `<section class="provider-grid">${providers.map(p => {
+      const state = systemData.providers?.[p.id]?.status || "disconnected";
+      return `<article class="provider-card"><h3>${p.name}</h3><p>${p.blurb}</p><span class="status-pill">${state}</span><button class="button ${state === "connected" || state === "demo" ? "secondary" : "primary"}" data-connect-provider="${p.id}" type="button">${state === "disconnected" ? "Connect" : "Reconnect"}</button></article>`;
+    }).join("")}</section>` +
+    (latest ? `<section class="metric-grid"><article class="metric-card recovery-card"><div><p class="kicker">RECOVERY</p><span class="status-pill">${escapeHtml(latest.provider)}</span></div><div class="recovery-ring" style="--recovery:${latest.recovery}"><strong>${latest.recovery}</strong><small>/100</small></div></article>
+      ${[["DAILY EXERTION", latest.exertion, "/10"], ["TRAINING LOAD", latest.load, "7-day"], ["SLEEP", latest.sleep, "hours"], ["RESTING HR", latest.hr, "bpm"]].map(([label, value, unit]) => `<article class="metric-card"><p class="kicker">${label}</p><h2>${value}<small>${unit}</small></h2></article>`).join("")}
+      <article class="recovery-alert ${low ? "low" : ""}"><div><p class="kicker">COACH</p><h2>${low ? "Protect recovery" : "Aligned"}</h2><p>${escapeHtml(suggestion)}</p></div>${low ? '<button class="button primary" data-apply-recovery type="button">Apply calendar adjustment</button>' : ""}</article></section>
+      <section class="collection-panel health-log"><div class="panel-heading"><div><p class="kicker">RECENT LOAD</p><h2>Performance log</h2></div></div>
+      ${systemData.health.map(item => `<button class="system-data-row" data-health-record="${item.id}" type="button"><span class="health-score ${item.recovery < 65 ? "low" : ""}">${item.recovery}</span><span><strong>${escapeHtml(item.workout)}</strong><small>${niceSystemDate(item.date)} · ${escapeHtml(item.provider)}</small></span><span><strong>${item.exertion}</strong><small>exertion</small></span></button>`).join("")}</section>`
+      : `<section class="collection-panel" style="margin-top:14px;padding:24px"><p class="empty-soft">No health metrics on this account. Connect Strava or Fitbit — no manual entry required for the primary path.</p></section>`);
+  root.querySelectorAll("[data-connect-provider]").forEach(btn => btn.addEventListener("click", () => window.AetherModules?.connectProvider?.(btn.dataset.connectProvider)));
   root.querySelectorAll("[data-health-record]").forEach(button => button.addEventListener("click", () => healthRecordForm(button.dataset.healthRecord)));
-  root.querySelector("[data-apply-recovery]")?.addEventListener("click", () => { const lift = systemData.events.find(event => event.date === systemToday && event.title.includes("Lift")); if (lift) { lift.title = "Light lift · technique focus"; lift.priority = "low"; } if (!systemData.events.some(event => event.date === systemToday && event.title.includes("Recovery reset"))) systemData.events.push({ id: systemId("e"), title: "Recovery reset", date: systemToday, start: "13:00", end: "13:30", source: "Health", priority: "high", zone: "Recovery", notes: "Added from recovery alert" }); saveSystemData(); showToast("Calendar adjusted for recovery."); renderHealthDashboard(); });
+  root.querySelector("[data-apply-recovery]")?.addEventListener("click", () => {
+    const lift = systemData.events.find(event => event.date === systemToday && /lift|strength|practice/i.test(event.title));
+    if (lift) { lift.title = `${lift.title} · technique focus`; lift.priority = "low"; }
+    if (!systemData.events.some(event => event.date === systemToday && event.title.includes("Recovery reset"))) {
+      systemData.events.push({ id: systemId("e"), title: "Recovery reset", date: systemToday, start: "13:00", end: "13:30", source: "Health", priority: "high", zone: "Recovery", notes: "Applied from coach suggestion" });
+    }
+    window.AetherModules?.pushNotification?.("Calendar adjusted", "Recovery suggestion applied. Everything stays editable.", "health");
+    saveSystemData(); showToast("Calendar adjusted for recovery."); renderHealthDashboard();
+  });
 }
 
 function healthRecordForm(id = null) {
@@ -842,12 +949,112 @@ function healthRecordForm(id = null) {
   openAcademicForm(id ? "Edit health log" : "Log health metrics", "PERFORMANCE RECORD", `<div class="form-row"><label>Date<input name="date" type="date" value="${record.date}" required></label><label>Provider<select name="provider">${["Manual", "Garmin", "Strava", "Fitbit", "Apple Health"].map(value => `<option ${record.provider === value ? "selected" : ""}>${value}</option>`).join("")}</select></label></div><div class="form-row"><label>Recovery score<input name="recovery" type="number" min="0" max="100" value="${record.recovery}" required></label><label>Exertion<input name="exertion" type="number" min="0" max="10" step=".1" value="${record.exertion}" required></label></div><div class="form-row"><label>Training load<input name="load" type="number" min="0" value="${record.load}" required></label><label>Sleep hours<input name="sleep" type="number" min="0" max="16" step=".1" value="${record.sleep}" required></label></div><div class="form-row"><label>Resting HR<input name="hr" type="number" min="25" max="220" value="${record.hr}" required></label><label>Workout<input name="workout" value="${escapeHtml(record.workout)}"></label></div>`, data => { const next = { id: id || systemId("h"), date: data.get("date"), provider: data.get("provider"), recovery: Number(data.get("recovery")), exertion: Number(data.get("exertion")), load: Number(data.get("load")), sleep: Number(data.get("sleep")), hr: Number(data.get("hr")), workout: data.get("workout").trim() || "Training" }; if (id) Object.assign(record, next); else systemData.health.unshift(next); systemData.health.sort((a, b) => b.date.localeCompare(a.date)); saveSystemData(); renderHealthDashboard(); showToast(id ? "Health log updated." : "Health metrics logged."); }, id ? () => { systemData.health = systemData.health.filter(item => item.id !== id); saveSystemData(); renderHealthDashboard(); showToast("Health log deleted."); } : null);
 }
 
-function renderCapitalDashboard() {
-  const root = $("#capitalDashboard"), income = systemData.transactions.filter(item => item.amount > 0).reduce((sum, item) => sum + item.amount, 0), spent = -systemData.transactions.filter(item => item.amount < 0).reduce((sum, item) => sum + item.amount, 0), net = income - spent, recurring = systemData.subscriptions.reduce((sum, item) => sum + item.amount, 0);
-  root.innerHTML = systemHeader("PERSONAL CAPITAL", "Capital", "Track cash flow, recurring costs, expenses, and savings goals.", [[systemMoney(net), "NET FLOW"], [systemMoney(spent), "SPENT"], [systemMoney(recurring), "RECURRING"]]) + `<section class="capital-overview"><article class="collection-panel cash-flow-card"><div class="panel-heading"><div><p class="kicker">MONTHLY CASH FLOW</p><h2>Money in, money out</h2></div><span class="status-pill">On track</span></div><div class="cash-totals"><div><span>INCOME</span><strong>${systemMoney(income)}</strong></div><div><span>EXPENSES</span><strong>−${systemMoney(spent)}</strong></div><div><span>NET</span><strong>${systemMoney(net)}</strong></div></div><div class="cash-bars">${[34, 46, 38, 58, 52, 70, 65, 78, 74, 88, 83, 96].map(value => `<i style="height:${value}%"></i>`).join("")}</div></article><article class="collection-panel goal-summary"><p class="kicker">SAVINGS GOALS</p><h2>What your money is building</h2>${systemData.goals.map(goal => `<button data-goal-record="${goal.id}" type="button"><span><strong>${escapeHtml(goal.name)}</strong><small>${systemMoney(goal.current)} of ${systemMoney(goal.target)}</small></span><b>${Math.round(goal.current / goal.target * 100)}%</b><i><em style="width:${Math.min(100, goal.current / goal.target * 100)}%"></em></i></button>`).join("")}<button class="text-button" data-add-goal type="button">+ Add savings goal</button></article></section><section class="system-split capital-lists"><div class="collection-panel"><div class="panel-heading"><div><p class="kicker">LEDGER</p><h2>Recent transactions</h2></div><button class="text-button" data-add-transaction type="button">+ Add transaction</button></div>${systemData.transactions.map(item => `<button class="system-data-row" data-transaction-record="${item.id}" type="button"><span class="transaction-icon">${item.amount > 0 ? "↗" : "↘"}</span><span><strong>${escapeHtml(item.name)}</strong><small>${niceSystemDate(item.date)} · ${escapeHtml(item.category)}</small></span><strong class="${item.amount > 0 ? "positive-copy" : ""}">${item.amount > 0 ? "+" : ""}${systemMoney(item.amount)}</strong><b>›</b></button>`).join("")}</div><aside class="collection-panel"><div class="panel-heading"><div><p class="kicker">RECURRING</p><h2>Subscriptions</h2></div><button class="text-button" data-add-subscription type="button">+ Add</button></div>${systemData.subscriptions.map(item => `<button class="subscription-record" data-subscription-record="${item.id}" type="button"><span><strong>${escapeHtml(item.name)}</strong><small>Renews on day ${item.due} · ${escapeHtml(item.category)}</small></span><b>${systemMoney(item.amount)}</b></button>`).join("")}</aside></section>`;
-  root.querySelector("[data-add-transaction]").addEventListener("click", () => transactionRecordForm()); root.querySelectorAll("[data-transaction-record]").forEach(button => button.addEventListener("click", () => transactionRecordForm(button.dataset.transactionRecord)));
-  root.querySelector("[data-add-subscription]").addEventListener("click", () => subscriptionRecordForm()); root.querySelectorAll("[data-subscription-record]").forEach(button => button.addEventListener("click", () => subscriptionRecordForm(button.dataset.subscriptionRecord)));
-  root.querySelector("[data-add-goal]").addEventListener("click", () => goalRecordForm()); root.querySelectorAll("[data-goal-record]").forEach(button => button.addEventListener("click", () => goalRecordForm(button.dataset.goalRecord)));
+async function renderCapitalDashboard() {
+  const root = $("#capitalDashboard");
+  if (!root) return;
+  if (await window.AetherModules?.renderCapitalPro?.(root)) return;
+  const income = systemData.transactions.filter(item => item.amount > 0).reduce((sum, item) => sum + item.amount, 0);
+  const spent = -systemData.transactions.filter(item => item.amount < 0).reduce((sum, item) => sum + item.amount, 0);
+  const net = income - spent;
+  const recurring = systemData.subscriptions.reduce((sum, item) => sum + item.amount, 0);
+  const budgets = systemData.budgets || [];
+  const portfolios = systemData.portfolios || [];
+  const symbols = [...new Set([...(systemData.capitalWatchlist || []), ...portfolios.map(p => p.symbol)])];
+  const quotes = await window.AetherCore.fetchQuotes(symbols);
+  let portfolioValue = 0;
+  let portfolioCost = 0;
+  const positions = portfolios.map(pos => {
+    const quote = quotes[pos.symbol] || {};
+    const price = Number(quote.c || pos.costBasis || 0);
+    const value = price * Number(pos.shares || 0);
+    const cost = Number(pos.costBasis || 0) * Number(pos.shares || 0);
+    portfolioValue += value;
+    portfolioCost += cost;
+    const pnl = value - cost;
+    const pnlPct = cost ? (pnl / cost) * 100 : 0;
+    return { ...pos, price, value, cost, pnl, pnlPct, dp: quote.dp || 0 };
+  });
+  const cash = net;
+  const netWorth = cash + portfolioValue;
+  const months = Array.from({ length: 12 }, (_, i) => {
+    const slice = systemData.transactions.filter(t => {
+      const m = Number(t.date.slice(5, 7));
+      return m === ((new Date().getMonth() + i) % 12) + 1 || true;
+    });
+    // Approximate spark from cumulative transaction magnitudes
+    return Math.min(96, 28 + Math.abs(systemData.transactions.slice(0, i + 1).reduce((s, t) => s + t.amount, 0)) / 20);
+  });
+  const empty = !systemData.transactions.length && !portfolios.length && !budgets.length;
+  root.innerHTML = systemHeader("PERSONAL CAPITAL", "Capital", "Net worth, cash flow, budgets, and portfolio positions with live quotes.", [[systemMoney(netWorth), "NET WORTH"], [systemMoney(net), "CASH FLOW"], [systemMoney(portfolioValue), "INVESTMENTS"]]) +
+    `<section class="capital-kpi-row">
+      <article class="capital-kpi"><span>NET WORTH</span><strong>${systemMoney(netWorth)}</strong></article>
+      <article class="capital-kpi"><span>CASH FLOW</span><strong>${systemMoney(net)}</strong></article>
+      <article class="capital-kpi"><span>SPENT</span><strong>${systemMoney(spent)}</strong></article>
+      <article class="capital-kpi"><span>RECURRING</span><strong>${systemMoney(recurring)}</strong></article>
+    </section>` +
+    (empty ? `<div class="collection-panel" style="padding:24px"><p class="empty-soft">No capital activity on this account yet. Connect Plaid, add transactions, or build a portfolio — sample market theater is never shown for signed-in users.</p>
+      <div class="provider-grid" style="margin-top:16px">
+        <article class="provider-card"><h3>Plaid</h3><p>Link banks in one popup.</p><button class="button primary" data-connect-provider="plaid" type="button">Connect</button></article>
+        <article class="provider-card"><h3>Manual ledger</h3><p>Add income and expenses.</p><button class="button secondary" data-add-transaction type="button">Add transaction</button></article>
+      </div></div>` : "") +
+    `<section class="capital-grid">
+      <article class="collection-panel cash-flow-card"><div class="panel-heading"><div><p class="kicker">CASH FLOW</p><h2>Money in, money out</h2></div><button class="button secondary" data-connect-provider="plaid" type="button">Link bank</button></div>
+        <div class="cash-totals"><div><span>INCOME</span><strong>${systemMoney(income)}</strong></div><div><span>EXPENSES</span><strong>−${systemMoney(spent)}</strong></div><div><span>NET</span><strong>${systemMoney(net)}</strong></div></div>
+        <div class="cash-bars">${months.map((value, i) => `<i style="height:${value}%;animation-delay:${i * 0.04}s"></i>`).join("")}</div>
+      </article>
+      <article class="collection-panel"><div class="panel-heading"><div><p class="kicker">BUDGETS</p><h2>Category limits</h2></div><button class="text-button" data-add-budget type="button">+ Budget</button></div>
+        ${budgets.length ? budgets.map(b => `<div class="widget-line"><strong>${escapeHtml(b.category)}</strong><span>${systemMoney(b.spent || 0)} / ${systemMoney(b.limit || 0)}</span></div><i class="goal-meter"><em style="width:${Math.min(100, ((b.spent || 0) / Math.max(1, b.limit || 1)) * 100)}%"></em></i>`).join("") : `<p class="empty-soft">Create budgets for Food, Travel, Academic, and more.</p>`}
+      </article>
+    </section>
+    <section class="capital-grid" style="margin-top:14px">
+      <article class="collection-panel"><div class="panel-heading"><div><p class="kicker">INVESTMENTS</p><h2>Positions &amp; P/L</h2></div><button class="text-button" data-add-position type="button">+ Position</button></div>
+        ${positions.length ? positions.map(p => `<button class="system-data-row" data-edit-position="${p.id}" type="button"><span class="transaction-icon">${p.symbol}</span><span><strong>${escapeHtml(p.name || p.symbol)}</strong><small>${p.shares} sh · ${systemMoney(p.price)}</small></span><span class="quote-tick ${p.pnl >= 0 ? "up" : "down"}"><strong>${p.pnl >= 0 ? "+" : ""}${systemMoney(p.pnl)}</strong><small>${p.pnlPct.toFixed(1)}%</small></span></button>`).join("") : `<p class="empty-soft">Add holdings to track cost basis and live P/L.</p>`}
+        <div class="panel-heading" style="margin-top:18px"><div><p class="kicker">WATCHLIST</p><h2>Live quotes</h2></div></div>
+        ${(systemData.capitalWatchlist || []).map(sym => { const q = quotes[sym] || {}; return `<div class="widget-line"><strong>${sym}</strong><span class="quote-tick ${(q.dp || 0) >= 0 ? "up" : "down"}">${systemMoney(q.c || 0)} · ${(q.dp || 0) >= 0 ? "+" : ""}${(q.dp || 0).toFixed?.(2) || q.dp}%</span></div>`; }).join("") || `<p class="empty-soft">Watchlist is empty.</p>`}
+        <div class="form-row" style="margin-top:12px"><input id="watchSymbolInput" placeholder="Add symbol e.g. MSFT"><button class="button secondary" data-add-watch type="button">Add</button></div>
+      </article>
+      <aside class="collection-panel"><div class="panel-heading"><div><p class="kicker">SAVINGS</p><h2>Goals</h2></div><button class="text-button" data-add-goal type="button">+ Goal</button></div>
+        ${systemData.goals.map(goal => `<button data-goal-record="${goal.id}" type="button"><span><strong>${escapeHtml(goal.name)}</strong><small>${systemMoney(goal.current)} of ${systemMoney(goal.target)}</small></span><b>${Math.round(goal.current / Math.max(1, goal.target) * 100)}%</b><i class="goal-meter"><em style="width:${Math.min(100, goal.current / Math.max(1, goal.target) * 100)}%"></em></i></button>`).join("") || `<p class="empty-soft">No savings goals yet.</p>`}
+        <div class="panel-heading" style="margin-top:18px"><div><p class="kicker">LEDGER</p><h2>Transactions</h2></div><button class="text-button" data-add-transaction type="button">+ Add</button></div>
+        ${systemData.transactions.map(item => `<button class="system-data-row" data-transaction-record="${item.id}" type="button"><span class="transaction-icon">${item.amount > 0 ? "↗" : "↘"}</span><span><strong>${escapeHtml(item.name)}</strong><small>${niceSystemDate(item.date)} · ${escapeHtml(item.category)}</small></span><strong class="${item.amount > 0 ? "positive-copy" : ""}">${item.amount > 0 ? "+" : ""}${systemMoney(item.amount)}</strong></button>`).join("") || `<p class="empty-soft">Ledger is empty.</p>`}
+        <div class="panel-heading" style="margin-top:18px"><div><p class="kicker">RECURRING</p><h2>Subscriptions</h2></div><button class="text-button" data-add-subscription type="button">+ Add</button></div>
+        ${systemData.subscriptions.map(item => `<button class="subscription-record" data-subscription-record="${item.id}" type="button"><span><strong>${escapeHtml(item.name)}</strong><small>Day ${item.due} · ${escapeHtml(item.category)}</small></span><b>${systemMoney(item.amount)}</b></button>`).join("") || `<p class="empty-soft">No subscriptions.</p>`}
+      </aside>
+    </section>`;
+  root.querySelectorAll("[data-connect-provider]").forEach(btn => btn.addEventListener("click", () => window.AetherModules?.connectProvider?.(btn.dataset.connectProvider)));
+  root.querySelector("[data-add-transaction]")?.addEventListener("click", () => transactionRecordForm());
+  root.querySelectorAll("[data-transaction-record]").forEach(button => button.addEventListener("click", () => transactionRecordForm(button.dataset.transactionRecord)));
+  root.querySelector("[data-add-subscription]")?.addEventListener("click", () => subscriptionRecordForm());
+  root.querySelectorAll("[data-subscription-record]").forEach(button => button.addEventListener("click", () => subscriptionRecordForm(button.dataset.subscriptionRecord)));
+  root.querySelector("[data-add-goal]")?.addEventListener("click", () => goalRecordForm());
+  root.querySelectorAll("[data-goal-record]").forEach(button => button.addEventListener("click", () => goalRecordForm(button.dataset.goalRecord)));
+  root.querySelector("[data-add-budget]")?.addEventListener("click", () => {
+    openAcademicForm("Add budget", "BUDGET", `<label>Category<input name="category" required></label><div class="form-row"><label>Limit<input name="limit" type="number" min="1" required></label><label>Spent<input name="spent" type="number" min="0" value="0"></label></div>`, data => {
+      systemData.budgets.push({ id: systemId("b"), category: data.get("category").trim(), limit: Number(data.get("limit")), spent: Number(data.get("spent")) });
+      saveSystemData(); renderCapitalDashboard(); showToast("Budget added.");
+    });
+  });
+  root.querySelector("[data-add-position]")?.addEventListener("click", () => {
+    openAcademicForm("Add position", "PORTFOLIO", `<div class="form-row"><label>Symbol<input name="symbol" required placeholder="VTI"></label><label>Shares<input name="shares" type="number" min="0" step="0.01" required></label></div><div class="form-row"><label>Name<input name="name"></label><label>Cost basis / sh<input name="costBasis" type="number" min="0" step="0.01" required></label></div>`, data => {
+      systemData.portfolios.push({ id: systemId("p"), symbol: data.get("symbol").trim().toUpperCase(), name: data.get("name").trim() || data.get("symbol").trim().toUpperCase(), shares: Number(data.get("shares")), costBasis: Number(data.get("costBasis")), provider: "Manual" });
+      saveSystemData(); renderCapitalDashboard(); showToast("Position added.");
+    });
+  });
+  root.querySelectorAll("[data-edit-position]").forEach(btn => btn.addEventListener("click", () => {
+    const pos = systemData.portfolios.find(p => p.id === btn.dataset.editPosition);
+    if (!pos) return;
+    openAcademicForm("Edit position", "PORTFOLIO", `<div class="form-row"><label>Symbol<input name="symbol" value="${escapeHtml(pos.symbol)}" required></label><label>Shares<input name="shares" type="number" value="${pos.shares}" required></label></div><div class="form-row"><label>Name<input name="name" value="${escapeHtml(pos.name || "")}"></label><label>Cost basis / sh<input name="costBasis" type="number" value="${pos.costBasis}" required></label></div>`, data => {
+      Object.assign(pos, { symbol: data.get("symbol").trim().toUpperCase(), shares: Number(data.get("shares")), name: data.get("name").trim(), costBasis: Number(data.get("costBasis")) });
+      saveSystemData(); renderCapitalDashboard();
+    }, () => { systemData.portfolios = systemData.portfolios.filter(p => p.id !== pos.id); saveSystemData(); renderCapitalDashboard(); });
+  }));
+  root.querySelector("[data-add-watch]")?.addEventListener("click", () => {
+    const symbol = root.querySelector("#watchSymbolInput")?.value.trim().toUpperCase();
+    if (!symbol) return;
+    systemData.capitalWatchlist = systemData.capitalWatchlist || [];
+    if (!systemData.capitalWatchlist.includes(symbol)) systemData.capitalWatchlist.push(symbol);
+    saveSystemData(); renderCapitalDashboard();
+  });
 }
 
 function transactionRecordForm(id = null) { const record = systemData.transactions.find(item => item.id === id) || { date: systemToday, name: "", category: "", amount: "", type: "expense" }; openAcademicForm(id ? "Edit transaction" : "Add transaction", "CAPITAL RECORD", `<label>Description<input name="name" required value="${escapeHtml(record.name)}"></label><div class="form-row"><label>Date<input name="date" type="date" value="${record.date}" required></label><label>Type<select name="type"><option ${record.type === "expense" ? "selected" : ""}>expense</option><option ${record.type === "income" ? "selected" : ""}>income</option></select></label></div><div class="form-row"><label>Category<input name="category" required value="${escapeHtml(record.category)}"></label><label>Amount<input name="amount" type="number" min="0" step=".01" required value="${Math.abs(record.amount)}"></label></div>`, data => { const next = { id: id || systemId("t"), name: data.get("name").trim(), date: data.get("date"), type: data.get("type"), category: data.get("category").trim(), amount: Math.abs(Number(data.get("amount"))) * (data.get("type") === "expense" ? -1 : 1) }; if (id) Object.assign(record, next); else systemData.transactions.unshift(next); saveSystemData(); renderCapitalDashboard(); showToast(id ? "Transaction updated." : "Transaction added."); }, id ? () => { systemData.transactions = systemData.transactions.filter(item => item.id !== id); saveSystemData(); renderCapitalDashboard(); showToast("Transaction deleted."); } : null); }
@@ -855,18 +1062,37 @@ function subscriptionRecordForm(id = null) { const record = systemData.subscript
 function goalRecordForm(id = null) { const record = systemData.goals.find(item => item.id === id) || { name: "", current: 0, target: "" }; openAcademicForm(id ? "Edit savings goal" : "Add savings goal", "CAPITAL GOAL", `<label>Goal<input name="name" required value="${escapeHtml(record.name)}"></label><div class="form-row"><label>Saved<input name="current" type="number" min="0" value="${record.current}" required></label><label>Target<input name="target" type="number" min="1" value="${record.target}" required></label></div>`, data => { const next = { id: id || systemId("g"), name: data.get("name").trim(), current: Number(data.get("current")), target: Number(data.get("target")) }; if (id) Object.assign(record, next); else systemData.goals.push(next); saveSystemData(); renderCapitalDashboard(); showToast("Savings goal saved."); }, id ? () => { systemData.goals = systemData.goals.filter(item => item.id !== id); saveSystemData(); renderCapitalDashboard(); showToast("Savings goal deleted."); } : null); }
 
 function renderSystemView(view) {
+  if (view === "tasks") window.AetherModules?.renderTasksDashboard?.();
   if (view === "networking") renderNetworkingDashboard();
   if (view === "calendar") renderCalendarDashboard();
   if (view === "mail") renderMailDashboard();
   if (view === "health") renderHealthDashboard();
   if (view === "capital") renderCapitalDashboard();
 }
+window.renderSystemView = renderSystemView;
+window.renderNetworkingDashboard = renderNetworkingDashboard;
+window.renderCalendarDashboard = renderCalendarDashboard;
+window.renderCapitalDashboard = renderCapitalDashboard;
+window.renderHome = renderHome;
+window.renderSettings = renderSettings;
+window.switchView = switchView;
+window.eventRecordForm = eventRecordForm;
+window.openAcademicForm = openAcademicForm;
+window.showToast = showToast;
+window.applyTabPreferences = applyTabPreferences;
+Object.defineProperty(window, "tabPreferences", {
+  get() { return tabPreferences; },
+  set(v) { tabPreferences = v; },
+  configurable: true
+});
+window.state = state;
 
 function openSystemPrimary(view) {
+  if (view === "tasks") window.AetherModules?.taskForm?.();
   if (view === "networking") contactRecordForm();
   if (view === "calendar") eventRecordForm();
   if (view === "mail") syncMail();
-  if (view === "health") healthRecordForm();
+  if (view === "health") window.AetherModules?.connectProvider?.("strava");
   if (view === "capital") transactionRecordForm();
 }
 
@@ -932,16 +1158,19 @@ function applyTheme() {
   const accentRgb = themePreferences.accent.replace("#", "").match(/.{2}/g).map(part => parseInt(part, 16)).join(", ");
   const sidebarRgb = themePreferences.sidebar.replace("#", "").match(/.{2}/g).map(part => parseInt(part, 16)).join(", ");
   root.style.setProperty("--green", themePreferences.accent);
+  root.style.setProperty("--school-accent", themePreferences.accent);
   root.style.setProperty("--green-dark", mixHex(themePreferences.accent, "#000000", 0.28));
-  root.style.setProperty("--green-soft", mixHex(themePreferences.accent, "#ffffff", 0.86));
+  root.style.setProperty("--green-soft", "rgba(var(--accent-rgb), 0.12)");
   root.style.setProperty("--accent-rgb", accentRgb);
   root.style.setProperty("--paper", themePreferences.paper);
-  root.style.setProperty("--surface-2", mixHex(themePreferences.paper, "#000000", 0.035));
+  root.style.setProperty("--surface-2", mixHex(themePreferences.paper, "#ffffff", 0.04));
   root.style.setProperty("--sidebar-bg", themePreferences.sidebar);
   root.style.setProperty("--sidebar-rgb", sidebarRgb);
   root.style.setProperty("--theme-deep-1", mixHex(themePreferences.sidebar, themePreferences.accent, 0.2));
   root.style.setProperty("--theme-deep-2", mixHex(themePreferences.sidebar, "#000000", 0.12));
-  document.querySelector('meta[name="theme-color"]').setAttribute("content", themePreferences.sidebar);
+  root.dataset.theme = themePreferences.baseTheme || systemData?.profile?.baseTheme || "charcoal";
+  window.AetherCore?.applyDocumentTheme?.({ ...(systemData?.profile || {}), accent: themePreferences.accent, baseTheme: root.dataset.theme });
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themePreferences.sidebar);
 }
 
 function applyTabPreferences() {
@@ -960,14 +1189,14 @@ function renderSettings() {
 
   $$('[data-tab-toggle]').forEach(input => input.addEventListener("change", () => {
     tabPreferences[input.dataset.tabToggle] = input.checked;
-    localStorage.setItem("aetherVisibleTabs", JSON.stringify(tabPreferences));
+    writeScoped("tabs", tabPreferences);
     scheduleCloudSave();
     applyTabPreferences();
     showToast(`${tabLabels[input.dataset.tabToggle]} ${input.checked ? "shown" : "hidden"}.`);
   }));
   $$('[data-theme-preset]').forEach(button => button.addEventListener("click", () => {
     themePreferences = { ...themePresets[button.dataset.themePreset] };
-    localStorage.setItem("aetherTheme", JSON.stringify(themePreferences));
+    writeScoped("theme", themePreferences);
     scheduleCloudSave();
     applyTheme();
     renderSettings();
@@ -977,7 +1206,7 @@ function renderSettings() {
 
 function updateCustomTheme() {
   themePreferences = { name: "Custom", accent: $("#themeAccent").value, paper: $("#themePaper").value, sidebar: $("#themeSidebar").value };
-  localStorage.setItem("aetherTheme", JSON.stringify(themePreferences));
+  writeScoped("theme", themePreferences);
   scheduleCloudSave();
   applyTheme();
   $$('[data-theme-preset]').forEach(button => button.classList.remove("active"));
@@ -1127,54 +1356,19 @@ function renderHome() {
   const hour = now.getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const dateLabel = now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
-  const todayEvents = systemData.events.filter(event => event.date === systemToday).sort((a, b) => a.start.localeCompare(b.start));
-  const nextEvent = todayEvents.find(event => event.end >= now.toTimeString().slice(0, 5)) || todayEvents[0];
-  const latestHealth = systemData.health[0] || { recovery: 0, sleep: 0, workout: "No performance log" };
-  const formatTime = value => {
-    const [hours, minutes] = value.split(":").map(Number);
-    return `${hours % 12 || 12}${minutes ? `:${String(minutes).padStart(2, "0")}` : ""} ${hours >= 12 ? "PM" : "AM"}`;
-  };
-
+  const name = window.AetherCurrentUserName || systemData.contacts.find(c => c.id === "c1")?.name?.split(" ")[0] || "Athlete";
   $("#homeDate").textContent = dateLabel;
-  $("#homeTitle").textContent = `${greeting}, ${window.AetherCurrentUserName || "Blake"}.`;
+  $("#homeTitle").textContent = `${greeting}, ${name}.`;
+  const lede = $("#homeLede");
+  if (lede) {
+    const school = systemData.profile?.schoolName || systemData.profile?.sport || "";
+    lede.textContent = school ? `${school} · curated command center` : "Your curated command center across every module.";
+  }
   updateHomeClock(now);
-  $("#homeFocusStatus").innerHTML = `<i></i>${todayEvents.length ? `${todayEvents.length} scheduled` : "Focused"}`;
-  $("#homePriorityList").innerHTML = todayEvents.length ? todayEvents.slice(0, 3).map((event, index) => `
-    <button class="priority-item" data-home-event="${event.id}" type="button">
-      <span class="priority-time">${event.start}</span>
-      <span class="priority-copy"><strong>${escapeHtml(event.title)}</strong><small>${escapeHtml(event.source)} · ${escapeHtml(event.zone)} · ${escapeHtml(event.priority)} priority</small></span>
-      <span class="priority-arrow">→</span>
-    </button>
-  `).join("") : `
-    <button class="priority-item" data-home-course="finance" type="button"><span class="priority-time">01</span><span class="priority-copy"><strong>Review multiple cash flows</strong><small>Finance · linked to Lecture 3</small></span><span class="priority-arrow">→</span></button>
-    <button class="priority-item" data-home-course="history" type="button"><span class="priority-time">02</span><span class="priority-copy"><strong>Strengthen discussion argument</strong><small>Revolutionary America · connected notes</small></span><span class="priority-arrow">→</span></button>`;
-  $("#homeHourlyTimeline").innerHTML = Array.from({ length: 13 }, (_, index) => index + 8).map(slotHour => {
-    const slotEvents = todayEvents.filter(event => Number(event.start.slice(0, 2)) === slotHour);
-    const hourLabel = `${slotHour % 12 || 12} ${slotHour >= 12 ? "PM" : "AM"}`;
-    return `<div class="hour-row ${slotHour === hour ? "current" : ""}"><time>${hourLabel}</time><div>${slotEvents.map(event => `<button data-home-event="${event.id}" type="button"><strong>${escapeHtml(event.title)}</strong><small>${formatTime(event.start)}–${formatTime(event.end)} · ${escapeHtml(event.source)}</small></button>`).join("") || `<span class="hour-open">Open</span>`}</div></div>`;
-  }).join("");
-  const healthHistory = systemData.health.slice(0, 7).reverse();
-  const recoveryPoints = (healthHistory.length ? healthHistory.map(item => item.recovery) : [0]);
-  const chartValues = recoveryPoints.length >= 7 ? recoveryPoints : [78, 72, 79, 84, ...recoveryPoints].slice(-7);
-  const xStep = 300 / Math.max(chartValues.length - 1, 1);
-  const points = chartValues.map((value, index) => `${index * xStep},${86 - (Math.max(0, Math.min(100, value)) * .68)}`).join(" ");
-  const areaPoints = `0,92 ${points} 300,92`;
-  const averageRecovery = Math.round(chartValues.reduce((sum, value) => sum + value, 0) / chartValues.length);
-  const trend = latestHealth.recovery >= averageRecovery ? "Above baseline" : "Take it easier";
-  $("#homeDayStatus").textContent = latestHealth.recovery < 65 ? "Recovery watch" : "Ready to train";
-  $("#homeDayCount").textContent = latestHealth.recovery;
-  $("#homeDaySummary").textContent = latestHealth.recovery < 65 ? "Protect recovery with a lighter session and a reset window." : "You are in range for your planned training load.";
-  $("#homeHealthTrend").textContent = trend;
-  $("#homeHealthRing").style.setProperty("--recovery", latestHealth.recovery);
-  $("#homeHealthChart").innerHTML = `<defs><linearGradient id="healthArea" x1="0" x2="0" y1="0" y2="1"><stop stop-color="rgba(49,94,75,.26)"/><stop offset="1" stop-color="rgba(49,94,75,0)"/></linearGradient></defs><polygon points="${areaPoints}" fill="url(#healthArea)"></polygon><polyline points="${points}" fill="none" stroke="var(--green)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></polyline>${chartValues.map((value, index) => `<circle cx="${index * xStep}" cy="${86 - (Math.max(0, Math.min(100, value)) * .68)}" r="3" fill="var(--paper)" stroke="var(--green)" stroke-width="2"></circle>`).join("")}`;
-  $("#homeHealthBullets").innerHTML = [`${latestHealth.sleep || 0} hours of sleep last night`, `Training load: ${latestHealth.load || 0} · exertion ${latestHealth.exertion || 0}/10`, `Resting heart rate: ${latestHealth.hr || "—"} bpm`].map(item => `<li>${escapeHtml(item)}</li>`).join("");
-  renderHomeMailWidgets();
-
-  $$('[data-home-event]').forEach(button => button.addEventListener("click", () => {
-    switchView("calendar");
-    eventRecordForm(button.dataset.homeEvent);
-  }));
-  $$('[data-home-course]').forEach(button => button.addEventListener("click", () => selectCourse(button.dataset.homeCourse)));
+  window.AetherModules?.renderHomeCommandCenter?.();
+  window.AetherModules?.renderNotificationBell?.();
+  const mailRoot = $("#homeMailIntelligence");
+  if (mailRoot) mailRoot.hidden = true;
 }
 
 function updateHomeClock(now = new Date()) {
@@ -1194,49 +1388,51 @@ function switchView(view) {
     home: ["Aether", "Home"],
     academic: ["Academic", "Classes"],
     workspace: ["Academic", currentCourse().code],
-    networking: ["Aether", "Networking"],
+    tasks: ["Aether", "Tasks & Goals"],
+    networking: ["Aether", "Network"],
     calendar: ["Aether", "Calendar"],
     mail: ["Aether", "Mail"],
-    health: ["Aether", "Health & performance"],
+    health: ["Aether", "Health"],
     capital: ["Aether", "Capital"],
     settings: ["Aether", "Settings"]
   };
   const [root, detail] = breadcrumbs[view];
   $("#breadcrumbRoot").textContent = root;
   $("#breadcrumbCourse").textContent = detail;
-  const primaryLabels = { home: "Quick capture", networking: "Add contact", calendar: "Add event", health: "Log metrics", capital: "Add transaction" };
+  const primaryLabels = { home: "Quick capture", tasks: "Add task", networking: "Add contact", calendar: "Add event", health: "Connect health", capital: "Add transaction" };
   $("#openCapture").innerHTML = `<span aria-hidden="true">+</span> ${primaryLabels[view] || "New note"}`;
   $(".topbar-actions").classList.toggle("home-hidden", view === "home" || view === "mail");
   renderCourseNav();
   if (view === "home") renderHome();
   if (view === "academic") renderAcademicDashboard();
+  if (view === "tasks") window.AetherModules?.renderTasksDashboard?.();
   if (view === "settings") renderSettings();
-  renderSystemView(view);
-  history.replaceState(null, "", ["academic", "networking", "calendar", "mail", "health", "capital", "settings"].includes(view) ? `#${view}` : location.pathname);
+  if (view === "capital") { renderSystemView(view); }
+  else renderSystemView(view);
+  history.replaceState(null, "", ["academic", "tasks", "networking", "calendar", "mail", "health", "capital", "settings"].includes(view) ? `#${view}` : location.pathname);
   closeSidebar();
 }
 
 function renderConnections() {
   const googleConnected = systemData.mail.connection.connected;
-  $("#connectionGrid").innerHTML = integrations.map(item => {
-    const isGoogle = item.name === "Google Mail & Calendar";
+  const providerCards = [
+    { name: "Google Mail & Calendar", short: "G", color: "#4f72a6", description: "Inbox triage and bidirectional Google Calendar.", id: "google" },
+    { name: "Strava", short: "S", color: "#fc4c02", description: "Training activities and load via OAuth popup.", id: "strava" },
+    { name: "Fitbit", short: "F", color: "#00b0b9", description: "Sleep, HR, and daily summaries.", id: "fitbit" },
+    { name: "Plaid", short: "P", color: "#111", description: "Bank balances and transactions.", id: "plaid" },
+    { name: "LinkedIn", short: "in", color: "#0a66c2", description: "Partner API pending — use CSV or email review queue.", id: "linkedin" },
+    { name: "Apple Health", short: "AH", color: "#e54", description: "iOS bridge coming; not available in browser.", id: "apple" }
+  ];
+  $("#connectionGrid").innerHTML = providerCards.map(item => {
+    const isGoogle = item.id === "google";
+    const status = isGoogle ? (googleConnected ? "connected" : "disconnected") : (systemData.providers?.[item.id]?.status || "disconnected");
     const action = isGoogle
-      ? googleConnected
-        ? `<span class="status-pill">Connected</span>`
-        : `<button class="button secondary" data-google-connect type="button">Connect Google</button>`
-      : `<span class="status-pill">Not connected</span>`;
-    return `
-    <article class="connection-card">
-      <div class="connection-logo" style="background:${item.color}">${item.short}</div>
-      <div>
-        <h3>${escapeHtml(item.name)}</h3>
-        <p>${escapeHtml(item.description)}</p>
-        <span class="connection-map">${escapeHtml(item.map)}</span>
-      </div>
-      ${action}
-    </article>
-  `; }).join("");
+      ? (googleConnected ? `<span class="status-pill">Connected</span>` : `<button class="button secondary" data-google-connect type="button">Connect Google</button>`)
+      : `<button class="button secondary" data-connect-provider="${item.id}" type="button">${status === "disconnected" ? "Connect" : "Manage"}</button>`;
+    return `<article class="connection-card"><div class="connection-logo" style="background:${item.color}">${item.short}</div><div><h3>${escapeHtml(item.name)}</h3><p>${escapeHtml(item.description)}</p><span class="connection-map">${escapeHtml(status)}</span></div>${action}</article>`;
+  }).join("");
   $("[data-google-connect]")?.addEventListener("click", connectMail);
+  $$("[data-connect-provider]").forEach(btn => btn.addEventListener("click", () => window.AetherModules?.connectProvider?.(btn.dataset.connectProvider)));
 }
 
 function updateCaptureSources() {
@@ -1249,7 +1445,7 @@ function setupCapture() {
   $("#noteCourseInput").innerHTML = courses.map(course => `<option value="${course.id}">${escapeHtml(course.code)} · ${escapeHtml(course.name)}</option>`).join("");
   $("#noteCourseInput").addEventListener("change", updateCaptureSources);
   $("#openCapture").addEventListener("click", () => {
-    if (["networking", "calendar", "mail", "health", "capital"].includes(state.view)) {
+    if (["tasks", "networking", "calendar", "mail", "health", "capital"].includes(state.view)) {
       openSystemPrimary(state.view);
       return;
     }
@@ -1414,8 +1610,8 @@ function setupEvents() {
   $("#addSource").addEventListener("click", () => sourceForm());
   ["themeAccent", "themePaper", "themeSidebar"].forEach(id => $("#" + id).addEventListener("input", updateCustomTheme));
   $("#resetTheme").addEventListener("click", () => {
-    themePreferences = { ...themePresets.forest };
-    localStorage.setItem("aetherTheme", JSON.stringify(themePreferences));
+    themePreferences = { ...themePresets.charcoal };
+    writeScoped("theme", themePreferences);
     scheduleCloudSave();
     applyTheme();
     renderSettings();
@@ -1445,7 +1641,32 @@ function init() {
   }, 1000);
   const requestedView = location.hash.slice(1);
   refreshMailSuggestions();
-  switchView(["academic", "networking", "calendar", "mail", "health", "capital", "settings"].includes(requestedView) ? requestedView : "home");
+  switchView(["academic", "tasks", "networking", "calendar", "mail", "health", "capital", "settings"].includes(requestedView) ? requestedView : "home");
+  $("#demoBannerLogin")?.addEventListener("click", () => {
+    localStorage.removeItem("aetherGuestMode");
+    if (typeof showAetherLogin === "function") showAetherLogin();
+    else {
+      $("#appShell").hidden = true;
+      $("#loginGate").hidden = false;
+    }
+  });
+  // Modules script loads after this file — finish wiring after all classic scripts.
+  setTimeout(() => {
+    window.AetherModules?.setupShellChrome?.();
+    window.AetherModules?.registerMotion?.();
+    window.AetherModules?.showDemoBanner?.(window.AetherCore?.activeUid() === "guest");
+    window.AetherModules?.ensureShape?.(systemData);
+    window.AetherModules?.renderHomeCommandCenter?.();
+    window.AetherModules?.renderNotificationBell?.();
+    if (systemData.profile && !systemData.profile.onboarded && window.AetherCore?.activeUid() !== "guest") {
+      setTimeout(() => window.AetherModules?.openOnboarding?.(), 400);
+    } else if (window.AetherCore?.activeUid() === "guest") {
+      if (!systemData.profile) systemData.profile = window.AetherCore.DEFAULT_PROFILE;
+      systemData.profile.onboarded = true;
+      saveSystemData();
+      window.AetherModules?.renderHomeCommandCenter?.();
+    }
+  }, 0);
 }
 
 init();

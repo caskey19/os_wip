@@ -1,15 +1,16 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="charcoal">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Aether is a private academic operating system for courses, mail, calendar, relationships, health, and progress."
+      content="Aether is a private student-athlete operating system for academics, mail, calendar, network, health, tasks, and capital."
     />
-    <meta name="theme-color" content="#151d19" />
+    <meta name="theme-color" content="#0c0d10" />
     <title>Aether</title>
     <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./aether-theme.css" />
   </head>
   <body>
     <section class="login-gate" id="loginGate" aria-labelledby="loginTitle">
@@ -24,8 +25,8 @@
           </svg>
         </div>
         <p class="login-brand">AETHER</p>
-        <h1 id="loginTitle">Welcome to Aether</h1>
-        <p class="login-subtitle">Log in with your Google account to continue</p>
+        <h1 id="loginTitle">Student-athlete OS</h1>
+        <p class="login-subtitle">Sign in for your private workspace, or explore the labeled demo.</p>
         <button class="google-login-button" id="aetherGoogleLogin" type="button" disabled>
           <svg viewBox="0 0 18 18" aria-hidden="true">
             <path fill="#4285F4" d="M17.64 9.205c0-.638-.057-1.252-.164-1.841H9v3.482h4.844a4.14 4.14 0 0 1-1.797 2.716v2.258h2.909c1.702-1.567 2.684-3.875 2.684-6.615Z"/>
@@ -37,10 +38,10 @@
         </button>
         <button class="guest-login-button" id="aetherGuestLogin" type="button">
           <span aria-hidden="true">↗</span>
-          Continue as guest
+          Continue with demo
         </button>
         <p class="login-status" id="loginStatus" role="status">Checking your session…</p>
-        <p class="login-privacy">Guest mode stays on this device. Sign in with Google for mail, calendar, and cloud sync.</p>
+        <p class="login-privacy">Demo data is labeled and never mixed with signed-in accounts. Google unlocks mail, calendar, and cloud sync.</p>
       </div>
     </section>
 
@@ -50,7 +51,7 @@
           <div class="brand-mark" aria-hidden="true">A</div>
           <div>
             <p class="brand-name">Aether</p>
-            <p class="brand-meta">Academic operating system</p>
+            <p class="brand-meta">Student-athlete OS</p>
           </div>
           <button class="icon-button mobile-close" id="closeSidebar" aria-label="Close navigation">×</button>
         </div>
@@ -70,9 +71,13 @@
             <span class="nav-symbol">◫</span>
             Academic
           </button>
+          <button class="nav-item" data-view="tasks" data-configurable-tab="tasks" type="button">
+            <span class="nav-symbol">☑</span>
+            Tasks &amp; Goals
+          </button>
           <button class="nav-item" data-view="networking" data-configurable-tab="networking" type="button">
             <span class="nav-symbol">⌬</span>
-            Networking
+            Network
           </button>
           <button class="nav-item" data-view="calendar" data-configurable-tab="calendar" type="button">
             <span class="nav-symbol">▦</span>
@@ -85,7 +90,7 @@
           </button>
           <button class="nav-item" data-view="health" data-configurable-tab="health" type="button">
             <span class="nav-symbol">◇</span>
-            Health &amp; performance
+            Health
           </button>
           <button class="nav-item" data-view="capital" data-configurable-tab="capital" type="button">
             <span class="nav-symbol">◔</span>
@@ -124,6 +129,11 @@
       <div class="sidebar-scrim" id="sidebarScrim"></div>
 
       <main class="main-area">
+        <div class="demo-banner" id="demoBanner" hidden>
+          <div><strong>Demo workspace</strong> — sample data only. Sign in with Google for your private account.</div>
+          <button class="button secondary compact" id="demoBannerLogin" type="button">Sign in</button>
+        </div>
+
         <header class="topbar">
           <div class="topbar-left">
             <button class="icon-button menu-button" id="openSidebar" aria-label="Open navigation">☰</button>
@@ -134,6 +144,12 @@
             </div>
           </div>
           <div class="topbar-actions">
+            <div class="notification-wrap">
+              <button class="notification-button" id="notificationButton" type="button" aria-label="Notifications">◉<span class="notification-badge" id="notificationBadge" hidden>0</span></button>
+              <div class="notification-panel" id="notificationPanel" role="dialog" aria-label="Notifications">
+                <div id="notificationList"></div>
+              </div>
+            </div>
             <button class="button secondary" id="openConnections" type="button">
               <span class="button-dot"></span>
               Connections
@@ -150,64 +166,23 @@
             <div>
               <p class="eyebrow" id="homeDate"></p>
               <h1 id="homeTitle">Good morning.</h1>
+              <p class="home-lede" id="homeLede">Your curated command center.</p>
             </div>
             <div class="home-clock" aria-label="Current local time">
               <span>Local time</span>
               <strong id="homeClock">--:--</strong>
             </div>
           </section>
-
-          <section class="home-command-grid" aria-label="Today overview">
-            <article class="home-card home-focus-card">
-              <div class="home-card-heading">
-                <div>
-                  <p class="kicker">TODAY</p>
-                  <h2>Priority stack</h2>
-                </div>
-                <span class="home-status live" id="homeFocusStatus"><i></i>Focused</span>
-              </div>
-              <div class="priority-list" id="homePriorityList"></div>
-            </article>
-
-            <article class="home-card home-hourly-card">
-              <div class="home-card-heading">
-                <div>
-                  <p class="kicker">TODAY'S CALENDAR</p>
-                  <h2>Hour by hour</h2>
-                </div>
-                <button class="text-button" data-home-target="calendar" type="button">Open calendar</button>
-              </div>
-              <div class="home-hourly-timeline" id="homeHourlyTimeline"></div>
-            </article>
-
-            <article class="home-card home-day-card">
-              <div class="home-card-heading">
-                <div>
-                  <p class="kicker">HEALTH OVERVIEW</p>
-                  <h2>Read your readiness</h2>
-                </div>
-                <div class="home-day-actions">
-                  <span class="home-status" id="homeDayStatus">Recovery check</span>
-                  <button class="button secondary compact" data-home-target="health" type="button">Open health</button>
-                </div>
-              </div>
-              <div class="home-health-layout">
-                <div class="health-score-wrap"><div class="home-health-ring" id="homeHealthRing"><strong id="homeDayCount">00</strong><span>recovery</span></div><p id="homeDaySummary">Your latest readiness snapshot.</p></div>
-                <div class="health-mini-chart" aria-label="Recent recovery trend"><div class="health-chart-label"><span>7-day recovery</span><strong id="homeHealthTrend">Steady</strong></div><svg id="homeHealthChart" viewBox="0 0 300 92" preserveAspectRatio="none" role="img" aria-label="Recovery trend chart"></svg></div>
-                <ul class="home-health-bullets" id="homeHealthBullets"></ul>
-              </div>
-            </article>
-          </section>
-
-          <section class="home-mail-grid" id="homeMailIntelligence" aria-label="Mail intelligence"></section>
+          <section class="home-command-center" id="homeCommandCenter" aria-label="Command center"></section>
+          <section class="home-mail-grid" id="homeMailIntelligence" aria-label="Mail intelligence" hidden></section>
         </div>
 
         <div id="academicView" class="view">
           <section class="page-heading academic-dashboard-heading">
             <div>
-              <p class="eyebrow">ACADEMIC COMMAND CENTER</p>
+              <p class="eyebrow">ACADEMIC</p>
               <h1>Classes</h1>
-              <p>See every course at once, then open the class you want to work in.</p>
+              <p>Every course in one command surface.</p>
             </div>
             <button class="button secondary" id="academicAddCourse" type="button">+ Add course</button>
           </section>
@@ -221,9 +196,9 @@
             <div class="course-heading">
               <div class="course-icon" id="courseIcon">FI</div>
               <div>
-                <div class="eyebrow" id="courseTerm">FALL 2026 · ACTIVE</div>
-                <h1 id="courseTitle">Finance</h1>
-                <p id="courseSubtitle">HADM 2220 · Build connected understanding from class material.</p>
+                <div class="eyebrow" id="courseTerm">TERM</div>
+                <h1 id="courseTitle">Course</h1>
+                <p id="courseSubtitle">Build connected understanding from class material.</p>
               </div>
             </div>
             <button class="button secondary" id="editCourse" type="button">Edit course</button>
@@ -272,13 +247,14 @@
               <div id="contextEmpty" class="context-empty">
                 <div class="empty-orbit" aria-hidden="true"><span></span></div>
                 <h3>Select a source</h3>
-                <p>Open a source to inspect its notes, citation, and connections.</p>
+                <p>Open a source to inspect notes, citation, and connections.</p>
               </div>
               <div id="contextContent" class="context-content" hidden></div>
             </aside>
           </section>
         </div>
 
+        <div id="tasksView" class="view system-view"><div id="tasksDashboard"></div></div>
         <div id="networkingView" class="view system-view"><div id="networkingDashboard"></div></div>
         <div id="calendarView" class="view system-view"><div id="calendarDashboard"></div></div>
         <div id="mailView" class="view system-view"><div id="mailDashboard"></div></div>
@@ -289,32 +265,40 @@
           <section class="page-heading settings-heading">
             <p class="eyebrow">WORKSPACE CONTROL</p>
             <h1>Settings</h1>
-            <p>Shape the navigation, appearance, and connected services for your OS.</p>
+            <p>Curate navigation, appearance, providers, and privacy for this account only.</p>
           </section>
 
           <section class="settings-layout">
             <article class="settings-card">
-              <div class="settings-card-heading"><div><p class="kicker">NAVIGATION</p><h2>Sidebar tabs</h2></div><span class="settings-badge">Saved automatically</span></div>
-              <p class="settings-description">Choose which workspaces appear in the left menu. Home and Settings stay available.</p>
+              <div class="settings-card-heading"><div><p class="kicker">ONBOARDING</p><h2>Layout builder</h2></div><button class="text-button" id="rerunOnboarding" type="button">Re-run setup</button></div>
+              <p class="settings-description">School accent, tabs, home widgets, mail priorities, and Capital PIN.</p>
+            </article>
+
+            <article class="settings-card">
+              <div class="settings-card-heading"><div><p class="kicker">NAVIGATION</p><h2>Sidebar tabs</h2></div><span class="settings-badge">Saved to account</span></div>
+              <p class="settings-description">Choose which workspaces appear. Home and Settings stay available.</p>
               <div class="tab-setting-list" id="tabSettingList"></div>
             </article>
 
             <article class="settings-card">
-              <div class="settings-card-heading"><div><p class="kicker">APPEARANCE</p><h2>Theme colors</h2></div><button class="text-button" id="resetTheme" type="button">Reset</button></div>
-              <p class="settings-description">Select a palette or tune the three core colors yourself.</p>
+              <div class="settings-card-heading"><div><p class="kicker">APPEARANCE</p><h2>Theme</h2></div><button class="text-button" id="resetTheme" type="button">Reset</button></div>
+              <p class="settings-description">Charcoal luxury with school accent, or black / white chrome.</p>
               <div class="theme-presets" id="themePresets"></div>
               <div class="color-control-grid">
-                <label>Accent<input id="themeAccent" type="color" value="#315e4b"></label>
-                <label>Page<input id="themePaper" type="color" value="#f5f4ef"></label>
-                <label>Sidebar<input id="themeSidebar" type="color" value="#16221d"></label>
+                <label>Accent<input id="themeAccent" type="color" value="#c8a96b"></label>
+                <label>Page<input id="themePaper" type="color" value="#0c0d10"></label>
+                <label>Sidebar<input id="themeSidebar" type="color" value="#08090c"></label>
               </div>
             </article>
 
             <article class="settings-card settings-connections-card">
-              <div class="settings-card-heading"><div><p class="kicker">CONNECTIONS</p><h2>Connected services</h2></div><span class="settings-badge">Prototype map</span></div>
-              <p class="settings-description">Manage where outside information will enter the OS and how it maps into your records.</p>
+              <div class="settings-card-heading"><div><p class="kicker">CONNECTIONS</p><h2>Providers</h2></div><span class="settings-badge">One-click connect</span></div>
+              <p class="settings-description">No API keys for athletes — sign in to each provider and sync.</p>
               <div id="connectionGrid" class="connection-grid settings-connection-grid"></div>
-              <div class="settings-flow"><span>Provider</span><i>→</i><span>Source record</span><i>→</i><span>Notes</span><i>→</i><span>Citation</span></div>
+              <div class="settings-import-row" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:16px">
+                <label class="button secondary">Import contacts CSV<input id="csvContactInput" type="file" accept=".csv,text/csv" hidden></label>
+                <label class="button secondary">Import athletic ICS/CSV<input id="athleticImportInput" type="file" accept=".ics,.csv,text/calendar,text/csv" hidden></label>
+              </div>
             </article>
           </section>
         </div>
@@ -324,7 +308,7 @@
     <dialog class="modal search-modal" id="searchModal">
       <div class="modal-search-row">
         <span class="search-icon" aria-hidden="true"></span>
-        <input id="globalSearchInput" type="search" placeholder="Search courses, mail, contacts, events, health, and capital" autocomplete="off" />
+        <input id="globalSearchInput" type="search" placeholder="Search courses, mail, contacts, events, tasks, health, capital" autocomplete="off" />
         <kbd>ESC</kbd>
       </div>
       <div id="searchResults" class="search-results"></div>
@@ -365,10 +349,14 @@
       </form>
     </dialog>
 
+    <dialog class="modal onboard-modal" id="onboardingModal"></dialog>
+
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="./firebase-config.js"></script>
+    <script src="./aether-core.js"></script>
     <script type="module" src="./mail-services.js"></script>
     <script src="./mail-ui.js"></script>
     <script src="./app.js"></script>
+    <script src="./aether-modules.js"></script>
   </body>
 </html>

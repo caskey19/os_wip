@@ -19,4 +19,4 @@ http.createServer(async (req, res) => {
     try { res.writeHead(200, { "content-type": "text/html; charset=utf-8" }); res.end(await readFile(join(root, "index.html"))); }
     catch { res.writeHead(404).end("Not found"); }
   }
-}).listen(port, "127.0.0.1", () => console.log(`BRAIN OS ready at http://127.0.0.1:${port}`));
+}).listen(port, "127.0.0.1", () => console.log(`Aether ready at http://127.0.0.1:${port}`));
