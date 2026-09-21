@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Aether is a private student-athlete operating system for academics, mail, calendar, network, health, tasks, and capital."
+      content="Aether is a private student-athlete operating system for academics, mail, calendar, network, health, and tasks."
     />
-    <meta name="theme-color" content="#0c0d10" />
+    <meta name="theme-color" content="#070708" />
     <title>Aether</title>
     <link rel="stylesheet" href="./styles.css" />
     <link rel="stylesheet" href="./aether-theme.css" />
@@ -41,7 +41,7 @@
           Continue with demo
         </button>
         <p class="login-status" id="loginStatus" role="status">Checking your session…</p>
-        <p class="login-privacy">Demo data is labeled and never mixed with signed-in accounts. Google unlocks mail, calendar, and cloud sync.</p>
+        <p class="login-privacy">Demo data is labeled and never mixed with signed-in accounts.</p>
       </div>
     </section>
 
@@ -92,10 +92,6 @@
             <span class="nav-symbol">◇</span>
             Health
           </button>
-          <button class="nav-item" data-view="capital" data-configurable-tab="capital" type="button">
-            <span class="nav-symbol">◔</span>
-            Capital
-          </button>
           <button class="nav-item" data-view="settings" type="button">
             <span class="nav-symbol">⚙</span>
             Settings
@@ -143,6 +139,10 @@
               <strong id="breadcrumbCourse">Home</strong>
             </div>
           </div>
+          <div class="topbar-clock" aria-label="Current local time">
+            <span>Local time</span>
+            <strong id="homeClock">--:--</strong>
+          </div>
           <div class="topbar-actions">
             <div class="notification-wrap">
               <button class="notification-button" id="notificationButton" type="button" aria-label="Notifications">◉<span class="notification-badge" id="notificationBadge" hidden>0</span></button>
@@ -166,14 +166,32 @@
             <div>
               <p class="eyebrow" id="homeDate"></p>
               <h1 id="homeTitle">Good morning.</h1>
-              <p class="home-lede" id="homeLede">Your curated command center.</p>
-            </div>
-            <div class="home-clock" aria-label="Current local time">
-              <span>Local time</span>
-              <strong id="homeClock">--:--</strong>
+              <p class="home-lede" id="homeLede">Command center</p>
             </div>
           </section>
-          <section class="home-command-center" id="homeCommandCenter" aria-label="Command center"></section>
+          <section class="home-kpi-strip" id="homeKpiStrip" aria-label="Summary statistics"></section>
+          <section class="home-primary-grid" aria-label="Priority and schedule">
+            <article class="home-priority-panel collection-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="kicker">PRIORITY STACK</p>
+                  <h2>What matters now</h2>
+                </div>
+              </div>
+              <div class="priority-list" id="homePriorityList"></div>
+            </article>
+            <article class="home-calendar-panel collection-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="kicker">THIS WEEK</p>
+                  <h2>Schedule workspace</h2>
+                </div>
+                <button class="text-button" data-home-target="calendar" type="button">Open calendar</button>
+              </div>
+              <div class="home-week-grid" id="homeWeekGrid"></div>
+            </article>
+          </section>
+          <section class="home-support-grid" id="homeSupportGrid" aria-label="Supporting panels"></section>
           <section class="home-mail-grid" id="homeMailIntelligence" aria-label="Mail intelligence" hidden></section>
         </div>
 
@@ -259,19 +277,18 @@
         <div id="calendarView" class="view system-view"><div id="calendarDashboard"></div></div>
         <div id="mailView" class="view system-view"><div id="mailDashboard"></div></div>
         <div id="healthView" class="view system-view"><div id="healthDashboard"></div></div>
-        <div id="capitalView" class="view system-view"><div id="capitalDashboard"></div></div>
 
         <div id="settingsView" class="view settings-view">
           <section class="page-heading settings-heading">
             <p class="eyebrow">WORKSPACE CONTROL</p>
             <h1>Settings</h1>
-            <p>Curate navigation, appearance, providers, and privacy for this account only.</p>
+            <p>Navigation, appearance, and connected services for this account.</p>
           </section>
 
           <section class="settings-layout">
             <article class="settings-card">
               <div class="settings-card-heading"><div><p class="kicker">ONBOARDING</p><h2>Layout builder</h2></div><button class="text-button" id="rerunOnboarding" type="button">Re-run setup</button></div>
-              <p class="settings-description">School accent, tabs, home widgets, mail priorities, and Capital PIN.</p>
+              <p class="settings-description">Tabs, home widgets, mail priorities, school, and sport.</p>
             </article>
 
             <article class="settings-card">
@@ -282,18 +299,13 @@
 
             <article class="settings-card">
               <div class="settings-card-heading"><div><p class="kicker">APPEARANCE</p><h2>Theme</h2></div><button class="text-button" id="resetTheme" type="button">Reset</button></div>
-              <p class="settings-description">Charcoal luxury with school accent, or black / white chrome.</p>
+              <p class="settings-description">Charcoal amber (default) or a light charcoal counterpart. Accent stays amber.</p>
               <div class="theme-presets" id="themePresets"></div>
-              <div class="color-control-grid">
-                <label>Accent<input id="themeAccent" type="color" value="#c8a96b"></label>
-                <label>Page<input id="themePaper" type="color" value="#0c0d10"></label>
-                <label>Sidebar<input id="themeSidebar" type="color" value="#08090c"></label>
-              </div>
             </article>
 
             <article class="settings-card settings-connections-card">
               <div class="settings-card-heading"><div><p class="kicker">CONNECTIONS</p><h2>Providers</h2></div><span class="settings-badge">One-click connect</span></div>
-              <p class="settings-description">No API keys for athletes — sign in to each provider and sync.</p>
+              <p class="settings-description">Sign in to each provider — no API keys for athletes.</p>
               <div id="connectionGrid" class="connection-grid settings-connection-grid"></div>
               <div class="settings-import-row" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:16px">
                 <label class="button secondary">Import contacts CSV<input id="csvContactInput" type="file" accept=".csv,text/csv" hidden></label>
@@ -308,7 +320,7 @@
     <dialog class="modal search-modal" id="searchModal">
       <div class="modal-search-row">
         <span class="search-icon" aria-hidden="true"></span>
-        <input id="globalSearchInput" type="search" placeholder="Search courses, mail, contacts, events, tasks, health, capital" autocomplete="off" />
+        <input id="globalSearchInput" type="search" placeholder="Search courses, mail, contacts, events, tasks, health" autocomplete="off" />
         <kbd>ESC</kbd>
       </div>
       <div id="searchResults" class="search-results"></div>

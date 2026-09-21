@@ -4,13 +4,13 @@
 
 1. **Human authority is permanent.** Automated records are never locked. Every contact, event, metric log, transaction, subscription, and goal can be added, edited, or deleted manually.
 2. **Provenance is visible.** Records carry a source such as Manual, Academic, Athletics, Health, Networking, Garmin, or MCP. Edits preserve their original source while recording manual ownership in the production schema.
-3. **One system, seven lenses.** Overview, Academic, Mail, Tasks, Networking, Health, and Capital publish domain events into a shared event bus; the Calendar is the temporal projection of that data.
+3. **One system, seven lenses.** Overview, Academic, Mail, Tasks, Networking, and Health publish domain events into a shared event bus; the Calendar is the temporal projection of that data.
 4. **Automation proposes before it disrupts.** Low-risk inserts can occur automatically. Schedule-changing health recommendations require an explicit Apply action.
 5. **Local-first prototype, server-ready architecture.** The working prototype uses browser storage, matching the Academic OS. Repository interfaces isolate persistence so it can move to D1/Postgres without rewriting views.
 
 ## Shared layout framework
 
-- **Single-shell navigation:** Workspace, Research Library, Connections, Networking, Calendar, Health & Performance, and Capital are peer views inside the same Academic OS page. There is no separate dashboards application; legacy `/brain/` links redirect into the unified Networking view.
+- **Single-shell navigation:** Workspace, Research Library, Connections, Networking, Calendar, Health & Performance are peer views inside the same Academic OS page. There is no separate dashboards application; legacy `/brain/` links redirect into the unified Networking view.
 - **Sidebar (265 px):** Academic OS identity, global command search, connected system routes, course list, local-save status, and private profile.
 - **Top bar (66 px):** breadcrumb, Integration Center, contextual Add action.
 - **Page header:** colored module mark, operational eyebrow, editorial title, single-sentence context, three live KPIs.
@@ -165,7 +165,10 @@ HealthPage
 └─ ProviderStatus
 ```
 
-## 4. Capital Dashboard
+## 4. Capital Dashboard (removed)
+
+Capital has been removed from Aether.
+
 
 ### User jobs
 
@@ -192,7 +195,6 @@ HealthPage
 ### Component architecture
 
 ```text
-CapitalPage
 ├─ ModuleHeader
 ├─ CashFlowCard
 ├─ SpendingMix
