@@ -863,8 +863,46 @@ h1, h2, h3, .brand-name, .login-brand, #homeTitle, .page-heading h1, .widget-kpi
 
 .calendar-content {
   display: grid;
-  grid-template-columns: 1fr minmax(220px, 280px);
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
   gap: 12px;
+  align-items: start;
+}
+
+.month-surface {
+  min-width: 0;
+  display: grid;
+  gap: 0;
+}
+
+.calendar-shell {
+  border: var(--border-subtle) !important;
+  border-radius: var(--radius-panel) !important;
+  background: var(--surface) !important;
+  box-shadow: none !important;
+}
+
+.notification-panel {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 40;
+  width: min(360px, 80vw);
+  max-height: 420px;
+  overflow: auto;
+  padding: 12px;
+  border: var(--border-subtle);
+  border-radius: var(--radius-panel);
+  background: var(--surface-2);
+  box-shadow: var(--shadow);
+}
+
+.notification-panel.open {
+  display: block;
+}
+
+.notification-wrap {
+  position: relative;
 }
 
 /* —— Network —— */

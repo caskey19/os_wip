@@ -861,11 +861,11 @@ function renderCalendarDashboard() {
       date.setDate(start.getDate() + index);
       return date.toISOString().slice(0, 10);
     });
-    surface = `<div class="month-labels">${["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"].map(day => `<span>${day}</span>`).join("")}</div><div class="integrated-month" style="--month-rows:${dayCount / 7}">${days.map(day => {
+    surface = `<div class="month-surface"><div class="month-labels">${["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"].map(day => `<span>${day}</span>`).join("")}</div><div class="integrated-month" style="--month-rows:${dayCount / 7}">${days.map(day => {
       const dayEvents = systemData.events.filter(event => event.date === day).sort((a, b) => a.start.localeCompare(b.start));
       const extra = dayEvents.length > 3 ? `<i class="month-more">+${dayEvents.length - 3}</i>` : "";
       return `<button class="month-cell ${day === systemToday ? "today" : ""} ${day.slice(0, 7) !== systemCalendarDate.slice(0, 7) ? "muted" : ""}" data-calendar-day="${day}" type="button"><b>${Number(day.slice(-2))}</b>${dayEvents.slice(0, 3).map(event => `<span class="month-event source-${escapeHtml(String(event.source || "manual").toLowerCase())}" data-calendar-event="${event.id}">${escapeHtml(event.start)} ${escapeHtml(event.title)}</span>`).join("")}${extra}</button>`;
-    }).join("")}</div>`;
+    }).join("")}</div></div>`;
   } else {
     surface = `<div class="integrated-calendar" style="--calendar-columns:${range.length}">${range.map(day => `<section><header class="${day === systemToday ? "today" : ""}"><span>${new Date(`${day}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" })}</span><strong>${Number(day.slice(-2))}</strong></header><div class="calendar-column" data-calendar-day="${day}">${systemData.events.filter(event => event.date === day).sort((a, b) => a.start.localeCompare(b.start)).map(event => `<button class="integrated-event source-${event.source.toLowerCase()}" data-calendar-event="${event.id}" type="button"><strong>${escapeHtml(event.title)}</strong><small>${escapeHtml(event.start)}–${escapeHtml(event.end)}</small><span>${escapeHtml(event.source)}</span></button>`).join("")}</div></section>`).join("")}</div>`;
   }
