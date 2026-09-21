@@ -1521,7 +1521,7 @@ function setupEvents() {
 }
 
 function init() {
-  applyTheme();
+  try { applyTheme(); } catch (error) { console.warn("Theme apply failed", error); }
   applyTabPreferences();
   setupCapture();
   setupSearch();
@@ -1530,6 +1530,7 @@ function init() {
   renderAcademicDashboard();
   renderConnections();
   renderHome();
+  updateHomeClock();
   setInterval(() => updateHomeClock(), 1000);
   const requestedView = location.hash.slice(1);
   refreshMailSuggestions();
