@@ -1039,6 +1039,12 @@ function renderAcademicDashboard() {
   $$('[data-academic-course]').forEach(button => button.addEventListener("click", () => selectCourse(button.dataset.academicCourse)));
 }
 
+function hexToRgb(value) {
+  const parts = String(value || "#050506").replace("#", "").match(/.{2}/g);
+  if (!parts) return "5, 5, 6";
+  return parts.map(part => parseInt(part, 16)).join(", ");
+}
+
 function mixHex(color, target, amount) {
   const read = value => value.replace("#", "").match(/.{2}/g).map(part => parseInt(part, 16));
   const [r, g, b] = read(color);
@@ -1049,8 +1055,9 @@ function mixHex(color, target, amount) {
 function applyTheme() {
   const root = document.documentElement;
   const accent = "#E8792B";
+  themePreferences = themePreferences || { ...themePresets.charcoal };
   themePreferences.accent = accent;
-  const sidebarRgb = hexToRgb(themePreferences.sidebar);
+  const sidebarRgb = hexToRgb(themePreferences.sidebar || "#050506");
   root.style.setProperty("--accent", accent);
   root.style.setProperty("--accent-hot", "#F08A2E");
   root.style.setProperty("--green", accent);
@@ -1058,9 +1065,9 @@ function applyTheme() {
   root.style.setProperty("--green-dark", "#C45F18");
   root.style.setProperty("--green-soft", "rgba(232, 121, 43, 0.14)");
   root.style.setProperty("--accent-rgb", "232, 121, 43");
-  root.style.setProperty("--paper", themePreferences.paper);
+  root.style.setProperty("--paper", themePreferences.paper || "#070708");
   root.style.setProperty("--surface-2", themePreferences.baseTheme === "light" ? "#F4F4F6" : "#1A1A1C");
-  root.style.setProperty("--sidebar-bg", themePreferences.sidebar);
+  root.style.setProperty("--sidebar-bg", themePreferences.sidebar || "#050506");
   root.style.setProperty("--sidebar-rgb", sidebarRgb);
   root.style.setProperty("--theme-deep-1", themePreferences.baseTheme === "light" ? "#FFFFFF" : "#0E0E10");
   root.style.setProperty("--theme-deep-2", themePreferences.baseTheme === "light" ? "#ECECEF" : "#050506");
@@ -1071,7 +1078,7 @@ function applyTheme() {
     systemData.profile.accent = accent;
   }
   window.AetherCore?.applyDocumentTheme?.({ ...(systemData?.profile || {}), accent, baseTheme: base });
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themePreferences.sidebar);
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themePreferences.sidebar || "#050506");
 }
 
 function applyTabPreferences() {
@@ -1269,6 +1276,9 @@ function updateHomeClock(now = new Date()) {
 
 function switchView(view) {
   state.view = view;
+  if (location.hash === "#login" || location.hash === "#/login") {
+    history.replaceState(null, "", location.pathname);
+  }
   $$(".view").forEach(panel => panel.classList.remove("active-view"));
   const target = $(`#${view}View`);
   if (!target) return;

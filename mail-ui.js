@@ -426,10 +426,11 @@ function enterAetherGuest() {
   $("#appShell").hidden = false;
   window.AetherModules?.showDemoBanner?.(true);
   window.AetherCore?.applyDocumentTheme?.(systemData.profile || {});
-  if (typeof applyTheme === "function") applyTheme();
+  try { if (typeof applyTheme === "function") applyTheme(); } catch (error) { console.warn("Theme apply failed", error); }
   if (typeof applyTabPreferences === "function") applyTabPreferences();
-  if (location.hash === "#login") switchView("home");
-  else switchView(state?.view || "home");
+  if (location.hash === "#login" || location.hash === "#/login") history.replaceState(null, "", location.pathname);
+  switchView("home");
+  updateHomeClock?.();
   renderHome();
   showToast("Demo mode ready — data is labeled and separate from Google accounts.");
 }

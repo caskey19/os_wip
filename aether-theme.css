@@ -339,15 +339,22 @@ h1, h2, h3, .brand-name, .login-brand, #homeTitle, .page-heading h1, .widget-kpi
 }
 
 .demo-banner {
+  position: relative;
+  z-index: 5;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-shrink: 0;
   padding: 8px 18px;
   border-bottom: 1px solid rgba(var(--accent-rgb), 0.28);
   background: rgba(var(--accent-rgb), 0.1);
   color: var(--chrome);
   font-size: 0.85rem;
+}
+
+.demo-banner[hidden] {
+  display: none !important;
 }
 
 /* —— Home command layout —— */
