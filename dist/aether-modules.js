@@ -1,11 +1,10 @@
 /**
- * Aether modules — onboarding, tasks/goals, notifications, capital PIN,
+ * Aether modules — onboarding, tasks/goals, notifications,
  * interactive network helpers, health connect UI, home widgets, motion.
  * Loaded after app.js; patches and extends runtime.
  */
 (function (global) {
   const Core = () => global.AetherCore;
-  let capitalUnlocked = false;
   let networkPan = { x: 0, y: 0, scale: 1 };
   let graphDragging = null;
 
@@ -20,9 +19,17 @@
     if (!Array.isArray(data.athleteGoals)) data.athleteGoals = [];
     if (!Array.isArray(data.reviewQueue)) data.reviewQueue = [];
     if (!Array.isArray(data.notifications)) data.notifications = [];
-    if (!Array.isArray(data.portfolios)) data.portfolios = [];
-    if (!Array.isArray(data.budgets)) data.budgets = [];
     if (!data.providers) data.providers = {};
+    // Drop legacy capital fields from profile
+    if (data.profile) {
+      delete data.profile.capitalModules;
+      delete data.profile.capitalPinHash;
+      delete data.profile.capitalPinEnabled;
+      if (data.profile.tabs) delete data.profile.tabs.capital;
+      if (Array.isArray(data.profile.homeWidgets)) {
+        data.profile.homeWidgets = data.profile.homeWidgets.filter(w => w.id !== "capital");
+      }
+    }
     return data;
   }
 
@@ -100,15 +107,15 @@
           title: "School & sport",
           body: `<label>School<select name="schoolId">${schools.map(s => `<option value="${s.id}" ${draft.schoolId === s.id ? "selected" : ""}>${escape(s.name)}</option>`).join("")}</select></label>
             <label>Sport<select name="sport">${sports.map(s => `<option ${draft.sport === s ? "selected" : ""}>${escape(s)}</option>`).join("")}</select></label>
-            <label>Accent preview<input name="accent" type="color" value="${draft.accent || "#C8A96B"}"></label>`
+            <p class="onboard-copy">Accent stays amber across all schools — school and sport are profile metadata only.</p>`
         },
         {
           title: "Look & tabs",
           body: `<div class="segmented onboard-theme" role="group">
-              <button type="button" class="segment ${draft.baseTheme !== "mono" ? "active" : ""}" data-base-theme="charcoal">Charcoal luxury</button>
-              <button type="button" class="segment ${draft.baseTheme === "mono" ? "active" : ""}" data-base-theme="mono">Black / white</button>
+              <button type="button" class="segment ${draft.baseTheme !== "light" ? "active" : ""}" data-base-theme="charcoal">Charcoal amber</button>
+              <button type="button" class="segment ${draft.baseTheme === "light" ? "active" : ""}" data-base-theme="light">Light charcoal</button>
             </div>
-            <div class="onboard-tabs">${Object.entries({ academic: "Academic", tasks: "Tasks & Goals", networking: "Network", calendar: "Calendar", health: "Health", capital: "Capital" }).map(([id, label]) => `
+            <div class="onboard-tabs">${Object.entries({ academic: "Academic", tasks: "Tasks & Goals", networking: "Network", calendar: "Calendar", health: "Health" }).map(([id, label]) => `
               <label class="tab-setting-row"><span><strong>${label}</strong></span><input type="checkbox" data-tab="${id}" ${draft.tabs?.[id] !== false ? "checked" : ""}><i></i></label>`).join("")}</div>`
         },
         {
@@ -126,14 +133,6 @@
                 <select data-widget-mode="${w.id}">${["kpi", "list", "bullets", "chart"].map(m => `<option ${w.mode === m ? "selected" : ""}>${m}</option>`).join("")}</select>
               </label>`).join("")}</div>`
         },
-        {
-          title: "Capital privacy",
-          body: `<p class="onboard-copy">Optional 4-digit PIN locks balances until unlocked once per session.</p>
-            <label class="checkbox-label"><input type="checkbox" name="pinEnabled" ${draft.capitalPinEnabled ? "checked" : ""}> Enable Capital PIN</label>
-            <label>PIN<input name="pin" type="password" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" placeholder="••••"></label>
-            <div class="chip-select">${["spend", "savings", "stocks", "networth", "budgeting"].map(item => `
-              <label class="choice-chip"><input type="checkbox" data-capital-mod="${item}" ${(draft.capitalModules || []).includes(item) ? "checked" : ""}> ${item}</label>`).join("")}</div>`
-        }
       ];
       const current = steps[step];
       dialog.innerHTML = `<form class="onboard-panel" id="onboardForm">
@@ -176,15 +175,10 @@
           const school = Core().SCHOOLS.find(s => s.id === schoolId);
           draft.schoolId = schoolId;
           draft.schoolName = school?.name || "";
-          if (school && school.id !== "custom") {
-            draft.accent = school.accent;
-            draft.chrome = school.chrome;
-          }
         }
         const sport = form.querySelector('[name="sport"]')?.value;
         if (sport) draft.sport = sport;
-        const accent = form.querySelector('[name="accent"]')?.value;
-        if (accent) draft.accent = accent;
+        draft.accent = Core().FIXED_ACCENT;
         if (form.querySelector("[data-tab]")) {
           draft.tabs = draft.tabs || {};
           form.querySelectorAll("[data-tab]").forEach(input => { draft.tabs[input.dataset.tab] = input.checked; });
@@ -199,21 +193,14 @@
             mode: form.querySelector(`[data-widget-mode="${input.dataset.widget}"]`)?.value || "list"
           }));
         }
-        if (form.querySelector('[name="pinEnabled"]')) {
-          draft.capitalPinEnabled = form.querySelector('[name="pinEnabled"]').checked;
-          draft._pinDraft = form.querySelector('[name="pin"]')?.value || "";
-        }
-        if (form.querySelector("[data-capital-mod]")) {
-          draft.capitalModules = [...form.querySelectorAll("[data-capital-mod]:checked")].map(i => i.dataset.capitalMod);
-        }
       }
     };
 
     async function finishOnboarding(next) {
-      if (next._pinDraft && next.capitalPinEnabled) {
-        next.capitalPinHash = await Core().hashPin(next._pinDraft);
-      }
-      delete next._pinDraft;
+      next.accent = Core().FIXED_ACCENT;
+      delete next.capitalPinHash;
+      delete next.capitalPinEnabled;
+      delete next.capitalModules;
       next.onboarded = true;
       global.systemData.profile = next;
       if (global.tabPreferences && next.tabs) Object.assign(global.tabPreferences, next.tabs);
@@ -236,28 +223,6 @@
     if (typeof global.showToast === "function") global.showToast(message);
   }
 
-  async function guardCapital() {
-    const profile = global.systemData?.profile;
-    if (!profile?.capitalPinEnabled || !profile.capitalPinHash) {
-      capitalUnlocked = true;
-      return true;
-    }
-    if (capitalUnlocked) return true;
-    const pin = prompt("Enter your 4-digit Capital PIN");
-    if (pin == null) return false;
-    const hash = await Core().hashPin(String(pin));
-    if (hash !== profile.capitalPinHash) {
-      showToastSafe("Incorrect PIN.");
-      return false;
-    }
-    capitalUnlocked = true;
-    showToastSafe("Capital unlocked for this session.");
-    return true;
-  }
-
-  function resetCapitalLock() {
-    capitalUnlocked = false;
-  }
 
   function renderTasksDashboard() {
     const root = document.querySelector("#tasksDashboard");
@@ -290,7 +255,7 @@
               <small>${escape(goal.target || "")}</small>
               <i class="goal-meter"><em style="width:${Math.min(100, Number(goal.progress) || 0)}%"></em></i>
               <b>${Math.round(Number(goal.progress) || 0)}%</b>
-            </button>`).join("") : `<div class="empty-list">Set sport, academic, career, or capital goals so Aether can coach against them.</div>`}
+            </button>`).join("") : `<div class="empty-list">Set sport, academic, or career goals so Aether can coach against them.</div>`}
         </aside>
       </section>`;
 
@@ -342,7 +307,7 @@
     const goal = global.systemData.athleteGoals.find(g => g.id === id) || { title: "", type: "sport", target: "", progress: 0, notes: "" };
     global.openAcademicForm?.(id ? "Edit goal" : "Add goal", "ATHLETE GOAL", `
       <label>Title<input name="title" required value="${escape(goal.title)}"></label>
-      <div class="form-row"><label>Type<select name="type">${["sport", "academic", "career", "capital"].map(v => `<option ${goal.type === v ? "selected" : ""}>${v}</option>`).join("")}</select></label>
+      <div class="form-row"><label>Type<select name="type">${["sport", "academic", "career"].map(v => `<option ${goal.type === v ? "selected" : ""}>${v}</option>`).join("")}</select></label>
       <label>Progress %<input name="progress" type="number" min="0" max="100" value="${goal.progress || 0}"></label></div>
       <label>Target<input name="target" value="${escape(goal.target || "")}"></label>
       <label>Notes<textarea name="notes" rows="3">${escape(goal.notes || "")}</textarea></label>`, data => {
@@ -367,73 +332,108 @@
   }
 
   function renderHomeCommandCenter() {
-    const grid = document.querySelector("#homeCommandCenter");
-    if (!grid || !global.systemData) return;
+    if (!global.systemData) return;
     ensureShape(global.systemData);
-    const profile = global.systemData.profile || Core().DEFAULT_PROFILE;
-    const widgets = (profile.homeWidgets || Core().DEFAULT_WIDGETS).filter(w => w.enabled !== false);
     const today = Core().todayISO();
     const events = (global.systemData.events || []).filter(e => e.date === today).sort((a, b) => a.start.localeCompare(b.start));
-    const tasks = (global.systemData.tasks || []).filter(t => t.status !== "done");
-    const mail = (global.systemData.mail?.messages || []).filter(m => m.urgency === "urgent" || m.unread);
+    const openTasks = (global.systemData.tasks || []).filter(t => t.status !== "done");
+    const urgentMail = (global.systemData.mail?.messages || []).filter(m => m.urgency === "urgent");
     const health = global.systemData.health?.[0];
-    const income = (global.systemData.transactions || []).filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
-    const spent = -(global.systemData.transactions || []).filter(t => t.amount < 0).reduce((s, t) => s + t.amount, 0);
-    const followups = (global.systemData.contacts || []).filter(c => c.id !== "c1" && c.lastContacted).slice(0, 4);
-    const goals = global.systemData.athleteGoals || [];
+    const contacts = (global.systemData.contacts || []).filter(c => c.id !== "c1");
+    const weekStart = new Date(`${today}T12:00:00`);
+    weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
+    const weekDays = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(weekStart);
+      d.setDate(weekStart.getDate() + i);
+      return d.toISOString().slice(0, 10);
+    });
 
-    const money = v => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(v || 0);
-
-    const renderWidget = (w) => {
-      if (w.id === "schedule") {
-        if (w.mode === "kpi") return card("Schedule", `<strong class="widget-kpi">${events.length}</strong><span>events today</span>`);
-        if (w.mode === "bullets") return card("Schedule", `<ul class="widget-bullets">${events.slice(0, 4).map(e => `<li><b>${escape(e.start)}</b> ${escape(e.title)}</li>`).join("") || "<li>Clear day</li>"}</ul>`);
-        if (w.mode === "chart") return card("Schedule load", `<div class="mini-bars">${[8, 9, 10, 11, 12, 13, 14, 15, 16, 17].map(h => { const n = events.filter(e => Number(e.start.slice(0, 2)) === h).length; return `<i style="height:${20 + n * 30}%"></i>`; }).join("")}</div>`);
-        return card("Today", events.length ? events.slice(0, 4).map(e => `<button class="widget-row-btn" data-home-event="${e.id}" type="button"><span>${escape(e.start)}</span><strong>${escape(e.title)}</strong></button>`).join("") : empty("No events today"));
-      }
-      if (w.id === "tasks") {
-        if (w.mode === "kpi") return card("Tasks", `<strong class="widget-kpi">${tasks.length}</strong><span>open</span>`);
-        if (w.mode === "bullets") return card("Open tasks", `<ul class="widget-bullets">${tasks.slice(0, 5).map(t => `<li>${escape(t.title)}</li>`).join("") || "<li>Inbox zero</li>"}</ul>`);
-        return card("Tasks", tasks.length ? tasks.slice(0, 5).map(t => `<div class="widget-line"><strong>${escape(t.title)}</strong><small>${escape(t.due || "")}</small></div>`).join("") : empty("Add tasks to drive the day"));
-      }
-      if (w.id === "mail") {
-        if (w.mode === "kpi") return card("Mail", `<strong class="widget-kpi">${mail.length}</strong><span>needs attention</span>`);
-        return card("Urgent mail", mail.length ? mail.slice(0, 4).map(m => `<div class="widget-line"><strong>${escape(m.subject)}</strong><small>${escape(m.sender)}</small></div>`).join("") : empty("No urgent mail"));
-      }
-      if (w.id === "health") {
-        const recovery = health?.recovery ?? null;
-        if (recovery == null) return card("Health", empty("Connect Strava or Fitbit"));
-        if (w.mode === "chart") {
-          const hist = (global.systemData.health || []).slice(0, 7).reverse();
-          return card("Recovery", `<div class="mini-bars">${hist.map(h => `<i style="height:${Math.max(12, h.recovery)}%"></i>`).join("")}</div><p class="widget-meta">${recovery}/100 · ${escape(health.provider || "")}</p>`);
-        }
-        return card("Readiness", `<strong class="widget-kpi">${recovery}</strong><span>recovery · ${escape(health.workout || "")}</span>`);
-      }
-      if (w.id === "capital") {
-        if (!global.systemData.transactions?.length && !global.systemData.portfolios?.length) return card("Capital", empty("Link accounts or add activity"));
-        return card("Capital", `<strong class="widget-kpi">${money(income - spent)}</strong><span>net flow</span>`);
-      }
-      if (w.id === "network") {
-        return card("Network", followups.length ? `<ul class="widget-bullets">${followups.map(c => `<li>${escape(c.name)} · ${escape(c.org)}</li>`).join("")}</ul>` : empty("Log interactions to see follow-ups"));
-      }
-      if (w.id === "goals") {
-        return card("Goals", goals.length ? goals.slice(0, 3).map(g => `<div class="widget-line"><strong>${escape(g.title)}</strong><i class="goal-meter thin"><em style="width:${g.progress || 0}%"></em></i></div>`).join("") : empty("Define goals in Tasks"));
-      }
-      return "";
-    };
-
-    function card(title, body) {
-      return `<article class="command-widget"><header><p class="kicker">${escape(title)}</p></header><div class="command-widget-body">${body}</div></article>`;
-    }
-    function empty(text) {
-      return `<p class="empty-soft">${escape(text)}</p>`;
+    const kpi = document.querySelector("#homeKpiStrip");
+    if (kpi) {
+      const cells = [
+        [events.length, "Today"],
+        [openTasks.length, "Open tasks"],
+        [urgentMail.length, "Urgent mail"],
+        [health?.recovery ?? "—", "Recovery"]
+      ];
+      kpi.innerHTML = cells.map(([value, label]) => `<article class="home-kpi"><span>${escape(label)}</span><strong>${escape(String(value))}</strong></article>`).join("");
     }
 
-    grid.innerHTML = widgets.map(renderWidget).join("") || `<p class="empty-soft">Enable home widgets in Settings.</p>`;
-    grid.querySelectorAll("[data-home-event]").forEach(btn => btn.addEventListener("click", () => {
-      global.switchView?.("calendar");
-      global.eventRecordForm?.(btn.dataset.homeEvent);
-    }));
+    const priority = document.querySelector("#homePriorityList");
+    if (priority) {
+      const stack = [];
+      openTasks.filter(t => t.priority === "high" || t.due === today).slice(0, 4).forEach(t => {
+        stack.push({ time: t.due === today ? "Due" : (t.due || "Task"), title: t.title, meta: t.area || "Task", view: "tasks", id: t.id });
+      });
+      urgentMail.slice(0, 3).forEach(m => {
+        stack.push({ time: "Mail", title: m.subject, meta: (m.sender || "").split("<")[0].trim(), view: "mail", id: m.id });
+      });
+      events.filter(e => e.priority === "high").slice(0, 3).forEach(e => {
+        stack.push({ time: e.start, title: e.title, meta: e.source, view: "calendar", id: e.id });
+      });
+      if (health && health.recovery < 65) {
+        stack.unshift({ time: "Health", title: `Recovery ${health.recovery} — protect intensity`, meta: health.workout || "Coach", view: "health", id: health.id });
+      }
+      const unique = [];
+      const seen = new Set();
+      stack.forEach(item => {
+        const key = `${item.view}:${item.title}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        unique.push(item);
+      });
+      priority.innerHTML = unique.length
+        ? unique.slice(0, 8).map(item => `<button class="priority-item" data-priority-view="${item.view}" data-priority-id="${escape(item.id || "")}" type="button"><span class="priority-time">${escape(item.time)}</span><span><strong>${escape(item.title)}</strong><small>${escape(item.meta)}</small></span><span class="priority-chevron">›</span></button>`).join("")
+        : `<p class="empty-soft">Nothing urgent. Add tasks, sync mail, or schedule the week.</p>`;
+      priority.querySelectorAll("[data-priority-view]").forEach(btn => btn.addEventListener("click", () => {
+        const view = btn.dataset.priorityView;
+        const id = btn.dataset.priorityId;
+        global.switchView?.(view);
+        if (view === "calendar" && id) global.eventRecordForm?.(id);
+        if (view === "mail") global.mailSelectedId = id;
+      }));
+    }
+
+    const week = document.querySelector("#homeWeekGrid");
+    if (week) {
+      week.innerHTML = weekDays.map(day => {
+        const date = new Date(`${day}T12:00:00`);
+        const dayEvents = (global.systemData.events || []).filter(e => e.date === day).sort((a, b) => a.start.localeCompare(b.start));
+        const isToday = day === today;
+        return `<div class="home-day-col ${isToday ? "is-today" : ""}" data-home-day="${day}">
+          <header><span>${date.toLocaleDateString("en-US", { weekday: "short" })}</span><strong>${date.getDate()}</strong></header>
+          <div class="home-day-events">${dayEvents.slice(0, 5).map(e => `<button class="home-week-event source-${escape(String(e.source || "manual").toLowerCase())}" data-home-event="${e.id}" type="button"><b>${escape(e.start)}</b><span>${escape(e.title)}</span></button>`).join("") || `<p class="empty-soft quiet">—</p>`}</div>
+        </div>`;
+      }).join("");
+      week.querySelectorAll("[data-home-event]").forEach(btn => btn.addEventListener("click", event => {
+        event.stopPropagation();
+        global.switchView?.("calendar");
+        global.eventRecordForm?.(btn.dataset.homeEvent);
+      }));
+      week.querySelectorAll("[data-home-day]").forEach(col => col.addEventListener("click", () => {
+        global.systemCalendarDate = col.dataset.homeDay;
+        global.switchView?.("calendar");
+      }));
+    }
+
+    const support = document.querySelector("#homeSupportGrid");
+    if (support) {
+      const agenda = events.slice(0, 5).map(e => `<div class="widget-line"><strong>${escape(e.start)} · ${escape(e.title)}</strong><small>${escape(e.zone || e.source)}</small></div>`).join("") || `<p class="empty-soft">No events today.</p>`;
+      const deadlines = openTasks.filter(t => t.due).sort((a, b) => String(a.due).localeCompare(String(b.due))).slice(0, 5)
+        .map(t => `<div class="widget-line"><strong>${escape(t.title)}</strong><small>${escape(t.due)} · ${escape(t.priority || "")}</small></div>`).join("") || `<p class="empty-soft">No dated tasks.</p>`;
+      const mailBlock = urgentMail.slice(0, 4).map(m => `<div class="widget-line"><strong>${escape(m.subject)}</strong><small>${escape((m.sender || "").split("<")[0].trim())}</small></div>`).join("") || `<p class="empty-soft">No urgent mail.</p>`;
+      const healthBlock = health
+        ? `<strong class="widget-kpi">${health.recovery}</strong><span>recovery · ${escape(health.workout || "")}</span>`
+        : `<p class="empty-soft">Connect Strava or Fitbit.</p>`;
+      const networkBlock = contacts.filter(c => c.lastContacted).slice(0, 4)
+        .map(c => `<div class="widget-line"><strong>${escape(c.name)}</strong><small>${escape(c.org || c.role || "")}</small></div>`).join("") || `<p class="empty-soft">Log interactions to see follow-ups.</p>`;
+      support.innerHTML = `
+        <article class="command-widget"><header><p class="kicker">TODAY AGENDA</p></header><div class="command-widget-body">${agenda}</div></article>
+        <article class="command-widget"><header><p class="kicker">DEADLINES</p></header><div class="command-widget-body">${deadlines}</div></article>
+        <article class="command-widget"><header><p class="kicker">MAIL</p></header><div class="command-widget-body">${mailBlock}</div></article>
+        <article class="command-widget"><header><p class="kicker">HEALTH</p></header><div class="command-widget-body">${healthBlock}</div></article>
+        <article class="command-widget"><header><p class="kicker">NETWORK</p></header><div class="command-widget-body">${networkBlock}</div></article>`;
+    }
   }
 
   function enhanceNetworkInteractivity(root) {
@@ -507,17 +507,6 @@
     }));
   }
 
-  async function renderCapitalPro(root) {
-    if (!(await guardCapital())) {
-      root.innerHTML = `<section class="page-heading system-heading"><div><p class="eyebrow">CAPITAL</p><h1>Locked</h1><p>Enter your PIN to view balances for this session.</p></div></section>
-        <button class="button primary" data-unlock-capital type="button">Unlock Capital</button>`;
-      root.querySelector("[data-unlock-capital]")?.addEventListener("click", async () => {
-        if (await guardCapital()) global.renderCapitalDashboard?.();
-      });
-      return true;
-    }
-    return false;
-  }
 
   function connectProvider(provider) {
     const profile = global.systemData.providers || (global.systemData.providers = {});
@@ -546,9 +535,6 @@
             provider: provider === "strava" ? "Strava" : "Fitbit"
           });
         }
-      }
-      if (provider === "plaid") {
-        pushNotification("Bank link", "Plaid sandbox is ready once Functions credentials are set. CSV import remains available.", "capital");
       }
       global.saveSystemData?.();
       showToastSafe(`${provider} connected (demo mode). Add Functions credentials for live sync.`);
@@ -665,14 +651,11 @@
     renderNotificationBell,
     showDemoBanner,
     openOnboarding,
-    guardCapital,
-    resetCapitalLock,
     renderTasksDashboard,
     renderHomeCommandCenter,
     enhanceNetworkInteractivity,
     renderReviewQueue,
     bindReviewQueue,
-    renderCapitalPro,
     connectProvider,
     importCsvContacts,
     importAthleticSchedule,

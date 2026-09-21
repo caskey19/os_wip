@@ -152,7 +152,6 @@ interface MailEventSuggestion {
 - `time`: calendar_events, student_tasks, task_event_links, provider_event_links, event_tombstones, schedule_suggestions, mail_event_suggestions.
 - `mail`: mail_preferences, mailbox_cursors, message_insights, reply_drafts. Raw message bodies should remain in Gmail unless a user explicitly retains them.
 - `performance`: health_snapshots, workouts, provider_samples, readiness_scores.
-- `capital`: accounts, transactions, categories, budgets, subscriptions, goals.
 - `platform`: integrations, sync_runs, webhook_receipts, audit_log, outbox_events.
 
 The outbox pattern commits a domain mutation and its outbound event atomically. Consumers store processed idempotency keys so retries remain safe.

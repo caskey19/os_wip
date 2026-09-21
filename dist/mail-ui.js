@@ -9,10 +9,21 @@ function classifyMail(message) {
 }
 
 function mailUrgency(message) {
-  if (message.urgency) return message.urgency;
+  const sender = String(message.sender || "").toLowerCase();
   const text = `${message.subject} ${message.body || message.snippet || ""}`.toLowerCase();
-  if (/urgent|action required|today|tomorrow|deadline|due|confirm|response requested/.test(text)) return "urgent";
-  if (/this week|meeting|exam|register|invitation|request/.test(text)) return "soon";
+  const category = message.category || classifyMail(message);
+  if (category === "Newsletters" || /newsletter|digest|headlines|roundup|unsubscribe/.test(`${sender} ${text}`)) {
+    return "low";
+  }
+  const coachOrRecruiter = /coach|recruit|athletic|scouting|compliance/.test(`${sender} ${text}`);
+  const deadlineOrAction = /deadline|due\b|action required|submit|exam|quiz|problem set|enrollment|response requested|confirm attendance/.test(text);
+  const highSignalSender = /professor|prof\.|instructor|registrar|career services|recruit/.test(sender);
+  if (deadlineOrAction || coachOrRecruiter || (highSignalSender && /urgent|today|tomorrow|this week|meeting|interview/.test(text))) {
+    return "urgent";
+  }
+  if (/meeting|interview|coffee chat|register|invitation|practice|this week/.test(text)) {
+    return "soon";
+  }
   return "low";
 }
 
@@ -57,13 +68,16 @@ function extractMailEvent(message) {
 
 function refreshMailSuggestions() {
   systemData.mail.messages.forEach(message => {
-    message.category ||= classifyMail(message);
-    message.urgency ||= mailUrgency(message);
+    message.category = classifyMail(message);
+    message.urgency = mailUrgency(message);
     if (systemData.mailSuggestions.some(item => item.mailMessageId === message.id)) return;
     const extracted = extractMailEvent(message);
     if (!extracted) return;
     const hoursAway = (new Date(`${extracted.date}T${extracted.start}:00`) - new Date()) / 36e5;
-    if (hoursAway >= 0 && hoursAway <= Number(systemData.mail.preferences.urgencyWindow || 48)) message.urgency = "urgent";
+    const isNewsletter = message.category === "Newsletters";
+    if (!isNewsletter && hoursAway >= 0 && hoursAway <= Number(systemData.mail.preferences.urgencyWindow || 48)) {
+      message.urgency = "urgent";
+    }
     const suggestion = { id: systemId("ms"), mailMessageId: message.id, sender: message.sender, subject: message.subject, status: "pending", confidence: message.calendar ? 98 : 82, ...extracted };
     systemData.mailSuggestions.unshift(suggestion);
     if (systemData.mail.preferences.calendarMode === "auto") approveMailSuggestion(suggestion.id, false);
@@ -519,9 +533,6 @@ async function initializeAetherAuth() {
     else enterAether(user);
   });
 }
-
-let homeCapitalSlide = 0;
-let homeCapitalSearch = "";
 
 function renderHomeMailWidgets() {
   const root = $("#homeMailIntelligence");
