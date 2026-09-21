@@ -345,12 +345,11 @@ const state = {
   searchItems: []
 };
 
-const defaultTabPreferences = { academic: true, tasks: true, networking: true, calendar: true, health: true, capital: true };
-const tabLabels = { academic: "Academic", tasks: "Tasks & Goals", networking: "Network", calendar: "Calendar", health: "Health", capital: "Capital" };
+const defaultTabPreferences = { academic: true, tasks: true, networking: true, calendar: true, health: true };
+const tabLabels = { academic: "Academic", tasks: "Tasks & Goals", networking: "Network", calendar: "Calendar", health: "Health" };
 const themePresets = {
-  charcoal: { name: "Charcoal Luxury", accent: "#c8a96b", paper: "#0c0d10", sidebar: "#08090c", baseTheme: "charcoal" },
-  cornell: { name: "Cornell", accent: "#B31B1B", paper: "#0c0d10", sidebar: "#08090c", baseTheme: "charcoal" },
-  mono: { name: "Black / White", accent: "#ffffff", paper: "#050505", sidebar: "#000000", baseTheme: "mono" }
+  charcoal: { name: "Charcoal amber", accent: "#E8792B", paper: "#070708", sidebar: "#050506", baseTheme: "charcoal" },
+  light: { name: "Light charcoal", accent: "#E8792B", paper: "#ECECEF", sidebar: "#F7F7F9", baseTheme: "light" }
 };
 let tabPreferences;
 let themePreferences;
@@ -515,13 +514,6 @@ const systemSeed = {
     { id: "h2", date: "2026-09-13", recovery: 78, exertion: 8.1, load: 812, sleep: 8, hr: 51, workout: "Practice · 92 min", provider: "Strava" },
     { id: "h3", date: "2026-09-12", recovery: 84, exertion: 6.2, load: 760, sleep: 8.4, hr: 49, workout: "Tempo run · 5.2 mi", provider: "Garmin" }
   ],
-  transactions: [
-    { id: "t1", date: "2026-09-13", name: "GreenStar Co-op", category: "Food", amount: -68.42, type: "expense" },
-    { id: "t2", date: "2026-09-12", name: "Campus job", category: "Income", amount: 420, type: "income" },
-    { id: "t3", date: "2026-09-11", name: "Cornell Store", category: "Academic", amount: -84.9, type: "expense" }
-  ],
-  subscriptions: [{ id: "s1", name: "Spotify Student", amount: 5.99, due: 18, category: "Media" }, { id: "s2", name: "iCloud+", amount: 2.99, due: 23, category: "Storage" }],
-  goals: [{ id: "g1", name: "Emergency fund", current: 2850, target: 5000 }, { id: "g2", name: "Summer travel", current: 920, target: 1800 }],
   mail: {
     connection: { mode: "demo", connected: false, name: "", email: "", lastSync: null, calendarLastSync: null, calendarError: "", calendarCount: 0, googleEventCount: 0 },
     preferences: { onboarded: false, focus: "academic", urgencyWindow: "48", newsletters: "digest", replyTone: "concise", calendarMode: "semi" },
@@ -541,7 +533,7 @@ function normalizeSystemData(raw, { demo = false } = {}) {
   const core = window.AetherCore;
   const base = demo ? core.demoWorkspace() : (raw && typeof raw === "object" ? raw : core.emptyWorkspace());
   const shaped = window.AetherModules?.ensureShape ? window.AetherModules.ensureShape(structuredClone(base)) : structuredClone(base);
-  ["contacts", "links", "opportunities", "events", "health", "transactions", "subscriptions", "goals", "mailSuggestions", "tasks", "athleteGoals", "reviewQueue", "notifications", "portfolios", "budgets"].forEach(key => {
+  ["contacts", "links", "opportunities", "events", "health", "mailSuggestions", "tasks", "athleteGoals", "reviewQueue", "notifications"].forEach(key => {
     if (!Array.isArray(shaped[key])) shaped[key] = [];
   });
   if (!shaped.mail || typeof shaped.mail !== "object") shaped.mail = core.emptyMail();
@@ -551,7 +543,8 @@ function normalizeSystemData(raw, { demo = false } = {}) {
   if (!Array.isArray(shaped.mail.messages)) shaped.mail.messages = demo ? core.demoWorkspace().mail.messages : [];
   if (!shaped.profile) shaped.profile = structuredClone(core.DEFAULT_PROFILE);
   if (!shaped.providers) shaped.providers = {};
-  if (!Array.isArray(shaped.capitalWatchlist)) shaped.capitalWatchlist = [];
+  if (shaped.profile?.tabs) delete shaped.profile.tabs.capital;
+  if (Array.isArray(shaped.profile?.homeWidgets)) shaped.profile.homeWidgets = shaped.profile.homeWidgets.filter(w => w.id !== "capital");
   return shaped;
 }
 
@@ -586,9 +579,11 @@ function loadScopedWorkspace(uid = window.AetherCore?.activeUid() || "guest") {
   networkFilterCompany = readScoped("networkCompany", "") || "";
   networkFilterPerson = readScoped("networkPerson", selectedSystemContact) || selectedSystemContact;
   tabPreferences = { ...defaultTabPreferences, ...readScoped("tabs", systemData.profile?.tabs || {}) };
-  themePreferences = { ...themePresets.charcoal, ...readScoped("theme", {}) };
-  if (systemData.profile?.accent) themePreferences.accent = systemData.profile.accent;
-  if (systemData.profile?.baseTheme) themePreferences.baseTheme = systemData.profile.baseTheme;
+  const storedTheme = readScoped("theme", {});
+  const presetKey = storedTheme.baseTheme === "light" || storedTheme.name === "Light charcoal" ? "light" : "charcoal";
+  themePreferences = { ...themePresets[presetKey], ...storedTheme, accent: "#E8792B" };
+  if (systemData.profile?.baseTheme === "light" || systemData.profile?.baseTheme === "mono") themePreferences = { ...themePresets.light, accent: "#E8792B" };
+  else if (systemData.profile?.baseTheme) themePreferences.baseTheme = "charcoal";
   window.AetherCore?.applyDocumentTheme(systemData.profile || {});
   window.systemData = systemData;
   return systemData;
@@ -723,7 +718,6 @@ window.AetherWorkspace = {
   setSyncLabel: setCloudSyncLabel,
   loadScoped: loadScopedWorkspace,
   resetSessionState() {
-    window.AetherModules?.resetCapitalLock?.();
   }
 };
 const systemId = prefix => `${prefix}${Date.now()}${Math.floor(Math.random() * 99)}`;
@@ -856,9 +850,22 @@ function renderCalendarDashboard() {
   const root = $("#calendarDashboard"), range = systemCalendarRange(), visible = systemData.events.filter(event => systemCalendarView === "month" ? event.date.slice(0, 7) === systemCalendarDate.slice(0, 7) : range.includes(event.date));
   let surface;
   if (systemCalendarView === "month") {
-    const first = new Date(`${systemCalendarDate.slice(0, 7)}-01T12:00:00`), start = new Date(first); start.setDate(1 - ((first.getDay() + 6) % 7));
-    const days = Array.from({ length: 35 }, (_, index) => { const date = new Date(start); date.setDate(start.getDate() + index); return date.toISOString().slice(0, 10); });
-    surface = `<div class="month-labels">${["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"].map(day => `<span>${day}</span>`).join("")}</div><div class="integrated-month">${days.map(day => `<button class="month-cell ${day === systemToday ? "today" : ""} ${day.slice(0, 7) !== systemCalendarDate.slice(0, 7) ? "muted" : ""}" data-calendar-day="${day}" type="button"><b>${Number(day.slice(-2))}</b>${systemData.events.filter(event => event.date === day).slice(0, 3).map(event => `<span data-calendar-event="${event.id}">${escapeHtml(event.start)} ${escapeHtml(event.title)}</span>`).join("")}</button>`).join("")}</div>`;
+    const first = new Date(`${systemCalendarDate.slice(0, 7)}-01T12:00:00`);
+    const start = new Date(first);
+    start.setDate(1 - ((first.getDay() + 6) % 7));
+    const endProbe = new Date(first.getFullYear(), first.getMonth() + 1, 0);
+    const weeks = Math.ceil((((endProbe.getDay() + 6) % 7) + endProbe.getDate()) / 7);
+    const dayCount = Math.max(35, weeks * 7);
+    const days = Array.from({ length: dayCount }, (_, index) => {
+      const date = new Date(start);
+      date.setDate(start.getDate() + index);
+      return date.toISOString().slice(0, 10);
+    });
+    surface = `<div class="month-labels">${["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"].map(day => `<span>${day}</span>`).join("")}</div><div class="integrated-month" style="--month-rows:${dayCount / 7}">${days.map(day => {
+      const dayEvents = systemData.events.filter(event => event.date === day).sort((a, b) => a.start.localeCompare(b.start));
+      const extra = dayEvents.length > 3 ? `<i class="month-more">+${dayEvents.length - 3}</i>` : "";
+      return `<button class="month-cell ${day === systemToday ? "today" : ""} ${day.slice(0, 7) !== systemCalendarDate.slice(0, 7) ? "muted" : ""}" data-calendar-day="${day}" type="button"><b>${Number(day.slice(-2))}</b>${dayEvents.slice(0, 3).map(event => `<span class="month-event source-${escapeHtml(String(event.source || "manual").toLowerCase())}" data-calendar-event="${event.id}">${escapeHtml(event.start)} ${escapeHtml(event.title)}</span>`).join("")}${extra}</button>`;
+    }).join("")}</div>`;
   } else {
     surface = `<div class="integrated-calendar" style="--calendar-columns:${range.length}">${range.map(day => `<section><header class="${day === systemToday ? "today" : ""}"><span>${new Date(`${day}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" })}</span><strong>${Number(day.slice(-2))}</strong></header><div class="calendar-column" data-calendar-day="${day}">${systemData.events.filter(event => event.date === day).sort((a, b) => a.start.localeCompare(b.start)).map(event => `<button class="integrated-event source-${event.source.toLowerCase()}" data-calendar-event="${event.id}" type="button"><strong>${escapeHtml(event.title)}</strong><small>${escapeHtml(event.start)}–${escapeHtml(event.end)}</small><span>${escapeHtml(event.source)}</span></button>`).join("")}</div></section>`).join("")}</div>`;
   }
@@ -949,131 +956,18 @@ function healthRecordForm(id = null) {
   openAcademicForm(id ? "Edit health log" : "Log health metrics", "PERFORMANCE RECORD", `<div class="form-row"><label>Date<input name="date" type="date" value="${record.date}" required></label><label>Provider<select name="provider">${["Manual", "Garmin", "Strava", "Fitbit", "Apple Health"].map(value => `<option ${record.provider === value ? "selected" : ""}>${value}</option>`).join("")}</select></label></div><div class="form-row"><label>Recovery score<input name="recovery" type="number" min="0" max="100" value="${record.recovery}" required></label><label>Exertion<input name="exertion" type="number" min="0" max="10" step=".1" value="${record.exertion}" required></label></div><div class="form-row"><label>Training load<input name="load" type="number" min="0" value="${record.load}" required></label><label>Sleep hours<input name="sleep" type="number" min="0" max="16" step=".1" value="${record.sleep}" required></label></div><div class="form-row"><label>Resting HR<input name="hr" type="number" min="25" max="220" value="${record.hr}" required></label><label>Workout<input name="workout" value="${escapeHtml(record.workout)}"></label></div>`, data => { const next = { id: id || systemId("h"), date: data.get("date"), provider: data.get("provider"), recovery: Number(data.get("recovery")), exertion: Number(data.get("exertion")), load: Number(data.get("load")), sleep: Number(data.get("sleep")), hr: Number(data.get("hr")), workout: data.get("workout").trim() || "Training" }; if (id) Object.assign(record, next); else systemData.health.unshift(next); systemData.health.sort((a, b) => b.date.localeCompare(a.date)); saveSystemData(); renderHealthDashboard(); showToast(id ? "Health log updated." : "Health metrics logged."); }, id ? () => { systemData.health = systemData.health.filter(item => item.id !== id); saveSystemData(); renderHealthDashboard(); showToast("Health log deleted."); } : null);
 }
 
-async function renderCapitalDashboard() {
-  const root = $("#capitalDashboard");
-  if (!root) return;
-  if (await window.AetherModules?.renderCapitalPro?.(root)) return;
-  const income = systemData.transactions.filter(item => item.amount > 0).reduce((sum, item) => sum + item.amount, 0);
-  const spent = -systemData.transactions.filter(item => item.amount < 0).reduce((sum, item) => sum + item.amount, 0);
-  const net = income - spent;
-  const recurring = systemData.subscriptions.reduce((sum, item) => sum + item.amount, 0);
-  const budgets = systemData.budgets || [];
-  const portfolios = systemData.portfolios || [];
-  const symbols = [...new Set([...(systemData.capitalWatchlist || []), ...portfolios.map(p => p.symbol)])];
-  const quotes = await window.AetherCore.fetchQuotes(symbols);
-  let portfolioValue = 0;
-  let portfolioCost = 0;
-  const positions = portfolios.map(pos => {
-    const quote = quotes[pos.symbol] || {};
-    const price = Number(quote.c || pos.costBasis || 0);
-    const value = price * Number(pos.shares || 0);
-    const cost = Number(pos.costBasis || 0) * Number(pos.shares || 0);
-    portfolioValue += value;
-    portfolioCost += cost;
-    const pnl = value - cost;
-    const pnlPct = cost ? (pnl / cost) * 100 : 0;
-    return { ...pos, price, value, cost, pnl, pnlPct, dp: quote.dp || 0 };
-  });
-  const cash = net;
-  const netWorth = cash + portfolioValue;
-  const months = Array.from({ length: 12 }, (_, i) => {
-    const slice = systemData.transactions.filter(t => {
-      const m = Number(t.date.slice(5, 7));
-      return m === ((new Date().getMonth() + i) % 12) + 1 || true;
-    });
-    // Approximate spark from cumulative transaction magnitudes
-    return Math.min(96, 28 + Math.abs(systemData.transactions.slice(0, i + 1).reduce((s, t) => s + t.amount, 0)) / 20);
-  });
-  const empty = !systemData.transactions.length && !portfolios.length && !budgets.length;
-  root.innerHTML = systemHeader("PERSONAL CAPITAL", "Capital", "Net worth, cash flow, budgets, and portfolio positions with live quotes.", [[systemMoney(netWorth), "NET WORTH"], [systemMoney(net), "CASH FLOW"], [systemMoney(portfolioValue), "INVESTMENTS"]]) +
-    `<section class="capital-kpi-row">
-      <article class="capital-kpi"><span>NET WORTH</span><strong>${systemMoney(netWorth)}</strong></article>
-      <article class="capital-kpi"><span>CASH FLOW</span><strong>${systemMoney(net)}</strong></article>
-      <article class="capital-kpi"><span>SPENT</span><strong>${systemMoney(spent)}</strong></article>
-      <article class="capital-kpi"><span>RECURRING</span><strong>${systemMoney(recurring)}</strong></article>
-    </section>` +
-    (empty ? `<div class="collection-panel" style="padding:24px"><p class="empty-soft">No capital activity on this account yet. Connect Plaid, add transactions, or build a portfolio — sample market theater is never shown for signed-in users.</p>
-      <div class="provider-grid" style="margin-top:16px">
-        <article class="provider-card"><h3>Plaid</h3><p>Link banks in one popup.</p><button class="button primary" data-connect-provider="plaid" type="button">Connect</button></article>
-        <article class="provider-card"><h3>Manual ledger</h3><p>Add income and expenses.</p><button class="button secondary" data-add-transaction type="button">Add transaction</button></article>
-      </div></div>` : "") +
-    `<section class="capital-grid">
-      <article class="collection-panel cash-flow-card"><div class="panel-heading"><div><p class="kicker">CASH FLOW</p><h2>Money in, money out</h2></div><button class="button secondary" data-connect-provider="plaid" type="button">Link bank</button></div>
-        <div class="cash-totals"><div><span>INCOME</span><strong>${systemMoney(income)}</strong></div><div><span>EXPENSES</span><strong>−${systemMoney(spent)}</strong></div><div><span>NET</span><strong>${systemMoney(net)}</strong></div></div>
-        <div class="cash-bars">${months.map((value, i) => `<i style="height:${value}%;animation-delay:${i * 0.04}s"></i>`).join("")}</div>
-      </article>
-      <article class="collection-panel"><div class="panel-heading"><div><p class="kicker">BUDGETS</p><h2>Category limits</h2></div><button class="text-button" data-add-budget type="button">+ Budget</button></div>
-        ${budgets.length ? budgets.map(b => `<div class="widget-line"><strong>${escapeHtml(b.category)}</strong><span>${systemMoney(b.spent || 0)} / ${systemMoney(b.limit || 0)}</span></div><i class="goal-meter"><em style="width:${Math.min(100, ((b.spent || 0) / Math.max(1, b.limit || 1)) * 100)}%"></em></i>`).join("") : `<p class="empty-soft">Create budgets for Food, Travel, Academic, and more.</p>`}
-      </article>
-    </section>
-    <section class="capital-grid" style="margin-top:14px">
-      <article class="collection-panel"><div class="panel-heading"><div><p class="kicker">INVESTMENTS</p><h2>Positions &amp; P/L</h2></div><button class="text-button" data-add-position type="button">+ Position</button></div>
-        ${positions.length ? positions.map(p => `<button class="system-data-row" data-edit-position="${p.id}" type="button"><span class="transaction-icon">${p.symbol}</span><span><strong>${escapeHtml(p.name || p.symbol)}</strong><small>${p.shares} sh · ${systemMoney(p.price)}</small></span><span class="quote-tick ${p.pnl >= 0 ? "up" : "down"}"><strong>${p.pnl >= 0 ? "+" : ""}${systemMoney(p.pnl)}</strong><small>${p.pnlPct.toFixed(1)}%</small></span></button>`).join("") : `<p class="empty-soft">Add holdings to track cost basis and live P/L.</p>`}
-        <div class="panel-heading" style="margin-top:18px"><div><p class="kicker">WATCHLIST</p><h2>Live quotes</h2></div></div>
-        ${(systemData.capitalWatchlist || []).map(sym => { const q = quotes[sym] || {}; return `<div class="widget-line"><strong>${sym}</strong><span class="quote-tick ${(q.dp || 0) >= 0 ? "up" : "down"}">${systemMoney(q.c || 0)} · ${(q.dp || 0) >= 0 ? "+" : ""}${(q.dp || 0).toFixed?.(2) || q.dp}%</span></div>`; }).join("") || `<p class="empty-soft">Watchlist is empty.</p>`}
-        <div class="form-row" style="margin-top:12px"><input id="watchSymbolInput" placeholder="Add symbol e.g. MSFT"><button class="button secondary" data-add-watch type="button">Add</button></div>
-      </article>
-      <aside class="collection-panel"><div class="panel-heading"><div><p class="kicker">SAVINGS</p><h2>Goals</h2></div><button class="text-button" data-add-goal type="button">+ Goal</button></div>
-        ${systemData.goals.map(goal => `<button data-goal-record="${goal.id}" type="button"><span><strong>${escapeHtml(goal.name)}</strong><small>${systemMoney(goal.current)} of ${systemMoney(goal.target)}</small></span><b>${Math.round(goal.current / Math.max(1, goal.target) * 100)}%</b><i class="goal-meter"><em style="width:${Math.min(100, goal.current / Math.max(1, goal.target) * 100)}%"></em></i></button>`).join("") || `<p class="empty-soft">No savings goals yet.</p>`}
-        <div class="panel-heading" style="margin-top:18px"><div><p class="kicker">LEDGER</p><h2>Transactions</h2></div><button class="text-button" data-add-transaction type="button">+ Add</button></div>
-        ${systemData.transactions.map(item => `<button class="system-data-row" data-transaction-record="${item.id}" type="button"><span class="transaction-icon">${item.amount > 0 ? "↗" : "↘"}</span><span><strong>${escapeHtml(item.name)}</strong><small>${niceSystemDate(item.date)} · ${escapeHtml(item.category)}</small></span><strong class="${item.amount > 0 ? "positive-copy" : ""}">${item.amount > 0 ? "+" : ""}${systemMoney(item.amount)}</strong></button>`).join("") || `<p class="empty-soft">Ledger is empty.</p>`}
-        <div class="panel-heading" style="margin-top:18px"><div><p class="kicker">RECURRING</p><h2>Subscriptions</h2></div><button class="text-button" data-add-subscription type="button">+ Add</button></div>
-        ${systemData.subscriptions.map(item => `<button class="subscription-record" data-subscription-record="${item.id}" type="button"><span><strong>${escapeHtml(item.name)}</strong><small>Day ${item.due} · ${escapeHtml(item.category)}</small></span><b>${systemMoney(item.amount)}</b></button>`).join("") || `<p class="empty-soft">No subscriptions.</p>`}
-      </aside>
-    </section>`;
-  root.querySelectorAll("[data-connect-provider]").forEach(btn => btn.addEventListener("click", () => window.AetherModules?.connectProvider?.(btn.dataset.connectProvider)));
-  root.querySelector("[data-add-transaction]")?.addEventListener("click", () => transactionRecordForm());
-  root.querySelectorAll("[data-transaction-record]").forEach(button => button.addEventListener("click", () => transactionRecordForm(button.dataset.transactionRecord)));
-  root.querySelector("[data-add-subscription]")?.addEventListener("click", () => subscriptionRecordForm());
-  root.querySelectorAll("[data-subscription-record]").forEach(button => button.addEventListener("click", () => subscriptionRecordForm(button.dataset.subscriptionRecord)));
-  root.querySelector("[data-add-goal]")?.addEventListener("click", () => goalRecordForm());
-  root.querySelectorAll("[data-goal-record]").forEach(button => button.addEventListener("click", () => goalRecordForm(button.dataset.goalRecord)));
-  root.querySelector("[data-add-budget]")?.addEventListener("click", () => {
-    openAcademicForm("Add budget", "BUDGET", `<label>Category<input name="category" required></label><div class="form-row"><label>Limit<input name="limit" type="number" min="1" required></label><label>Spent<input name="spent" type="number" min="0" value="0"></label></div>`, data => {
-      systemData.budgets.push({ id: systemId("b"), category: data.get("category").trim(), limit: Number(data.get("limit")), spent: Number(data.get("spent")) });
-      saveSystemData(); renderCapitalDashboard(); showToast("Budget added.");
-    });
-  });
-  root.querySelector("[data-add-position]")?.addEventListener("click", () => {
-    openAcademicForm("Add position", "PORTFOLIO", `<div class="form-row"><label>Symbol<input name="symbol" required placeholder="VTI"></label><label>Shares<input name="shares" type="number" min="0" step="0.01" required></label></div><div class="form-row"><label>Name<input name="name"></label><label>Cost basis / sh<input name="costBasis" type="number" min="0" step="0.01" required></label></div>`, data => {
-      systemData.portfolios.push({ id: systemId("p"), symbol: data.get("symbol").trim().toUpperCase(), name: data.get("name").trim() || data.get("symbol").trim().toUpperCase(), shares: Number(data.get("shares")), costBasis: Number(data.get("costBasis")), provider: "Manual" });
-      saveSystemData(); renderCapitalDashboard(); showToast("Position added.");
-    });
-  });
-  root.querySelectorAll("[data-edit-position]").forEach(btn => btn.addEventListener("click", () => {
-    const pos = systemData.portfolios.find(p => p.id === btn.dataset.editPosition);
-    if (!pos) return;
-    openAcademicForm("Edit position", "PORTFOLIO", `<div class="form-row"><label>Symbol<input name="symbol" value="${escapeHtml(pos.symbol)}" required></label><label>Shares<input name="shares" type="number" value="${pos.shares}" required></label></div><div class="form-row"><label>Name<input name="name" value="${escapeHtml(pos.name || "")}"></label><label>Cost basis / sh<input name="costBasis" type="number" value="${pos.costBasis}" required></label></div>`, data => {
-      Object.assign(pos, { symbol: data.get("symbol").trim().toUpperCase(), shares: Number(data.get("shares")), name: data.get("name").trim(), costBasis: Number(data.get("costBasis")) });
-      saveSystemData(); renderCapitalDashboard();
-    }, () => { systemData.portfolios = systemData.portfolios.filter(p => p.id !== pos.id); saveSystemData(); renderCapitalDashboard(); });
-  }));
-  root.querySelector("[data-add-watch]")?.addEventListener("click", () => {
-    const symbol = root.querySelector("#watchSymbolInput")?.value.trim().toUpperCase();
-    if (!symbol) return;
-    systemData.capitalWatchlist = systemData.capitalWatchlist || [];
-    if (!systemData.capitalWatchlist.includes(symbol)) systemData.capitalWatchlist.push(symbol);
-    saveSystemData(); renderCapitalDashboard();
-  });
-}
-
-function transactionRecordForm(id = null) { const record = systemData.transactions.find(item => item.id === id) || { date: systemToday, name: "", category: "", amount: "", type: "expense" }; openAcademicForm(id ? "Edit transaction" : "Add transaction", "CAPITAL RECORD", `<label>Description<input name="name" required value="${escapeHtml(record.name)}"></label><div class="form-row"><label>Date<input name="date" type="date" value="${record.date}" required></label><label>Type<select name="type"><option ${record.type === "expense" ? "selected" : ""}>expense</option><option ${record.type === "income" ? "selected" : ""}>income</option></select></label></div><div class="form-row"><label>Category<input name="category" required value="${escapeHtml(record.category)}"></label><label>Amount<input name="amount" type="number" min="0" step=".01" required value="${Math.abs(record.amount)}"></label></div>`, data => { const next = { id: id || systemId("t"), name: data.get("name").trim(), date: data.get("date"), type: data.get("type"), category: data.get("category").trim(), amount: Math.abs(Number(data.get("amount"))) * (data.get("type") === "expense" ? -1 : 1) }; if (id) Object.assign(record, next); else systemData.transactions.unshift(next); saveSystemData(); renderCapitalDashboard(); showToast(id ? "Transaction updated." : "Transaction added."); }, id ? () => { systemData.transactions = systemData.transactions.filter(item => item.id !== id); saveSystemData(); renderCapitalDashboard(); showToast("Transaction deleted."); } : null); }
-function subscriptionRecordForm(id = null) { const record = systemData.subscriptions.find(item => item.id === id) || { name: "", amount: "", due: 1, category: "" }; openAcademicForm(id ? "Edit subscription" : "Add subscription", "RECURRING COST", `<label>Name<input name="name" required value="${escapeHtml(record.name)}"></label><div class="form-row"><label>Monthly amount<input name="amount" type="number" min="0" step=".01" value="${record.amount}" required></label><label>Billing day<input name="due" type="number" min="1" max="31" value="${record.due}" required></label></div><label>Category<input name="category" value="${escapeHtml(record.category)}"></label>`, data => { const next = { id: id || systemId("s"), name: data.get("name").trim(), amount: Number(data.get("amount")), due: Number(data.get("due")), category: data.get("category").trim() }; if (id) Object.assign(record, next); else systemData.subscriptions.push(next); saveSystemData(); renderCapitalDashboard(); showToast("Subscription saved."); }, id ? () => { systemData.subscriptions = systemData.subscriptions.filter(item => item.id !== id); saveSystemData(); renderCapitalDashboard(); showToast("Subscription deleted."); } : null); }
-function goalRecordForm(id = null) { const record = systemData.goals.find(item => item.id === id) || { name: "", current: 0, target: "" }; openAcademicForm(id ? "Edit savings goal" : "Add savings goal", "CAPITAL GOAL", `<label>Goal<input name="name" required value="${escapeHtml(record.name)}"></label><div class="form-row"><label>Saved<input name="current" type="number" min="0" value="${record.current}" required></label><label>Target<input name="target" type="number" min="1" value="${record.target}" required></label></div>`, data => { const next = { id: id || systemId("g"), name: data.get("name").trim(), current: Number(data.get("current")), target: Number(data.get("target")) }; if (id) Object.assign(record, next); else systemData.goals.push(next); saveSystemData(); renderCapitalDashboard(); showToast("Savings goal saved."); }, id ? () => { systemData.goals = systemData.goals.filter(item => item.id !== id); saveSystemData(); renderCapitalDashboard(); showToast("Savings goal deleted."); } : null); }
-
 function renderSystemView(view) {
   if (view === "tasks") window.AetherModules?.renderTasksDashboard?.();
   if (view === "networking") renderNetworkingDashboard();
   if (view === "calendar") renderCalendarDashboard();
   if (view === "mail") renderMailDashboard();
   if (view === "health") renderHealthDashboard();
-  if (view === "capital") renderCapitalDashboard();
 }
 window.renderSystemView = renderSystemView;
 window.renderNetworkingDashboard = renderNetworkingDashboard;
 window.renderCalendarDashboard = renderCalendarDashboard;
-window.renderCapitalDashboard = renderCapitalDashboard;
 window.renderHome = renderHome;
+Object.defineProperty(window, "systemCalendarDate", { get() { return systemCalendarDate; }, set(v) { systemCalendarDate = v; } });
 window.renderSettings = renderSettings;
 window.switchView = switchView;
 window.eventRecordForm = eventRecordForm;
@@ -1093,7 +987,6 @@ function openSystemPrimary(view) {
   if (view === "calendar") eventRecordForm();
   if (view === "mail") syncMail();
   if (view === "health") window.AetherModules?.connectProvider?.("strava");
-  if (view === "capital") transactionRecordForm();
 }
 
 function linkedNotes(course, sourceId) {
@@ -1155,21 +1048,29 @@ function mixHex(color, target, amount) {
 
 function applyTheme() {
   const root = document.documentElement;
-  const accentRgb = themePreferences.accent.replace("#", "").match(/.{2}/g).map(part => parseInt(part, 16)).join(", ");
-  const sidebarRgb = themePreferences.sidebar.replace("#", "").match(/.{2}/g).map(part => parseInt(part, 16)).join(", ");
-  root.style.setProperty("--green", themePreferences.accent);
-  root.style.setProperty("--school-accent", themePreferences.accent);
-  root.style.setProperty("--green-dark", mixHex(themePreferences.accent, "#000000", 0.28));
-  root.style.setProperty("--green-soft", "rgba(var(--accent-rgb), 0.12)");
-  root.style.setProperty("--accent-rgb", accentRgb);
+  const accent = "#E8792B";
+  themePreferences.accent = accent;
+  const sidebarRgb = hexToRgb(themePreferences.sidebar);
+  root.style.setProperty("--accent", accent);
+  root.style.setProperty("--accent-hot", "#F08A2E");
+  root.style.setProperty("--green", accent);
+  root.style.setProperty("--school-accent", accent);
+  root.style.setProperty("--green-dark", "#C45F18");
+  root.style.setProperty("--green-soft", "rgba(232, 121, 43, 0.14)");
+  root.style.setProperty("--accent-rgb", "232, 121, 43");
   root.style.setProperty("--paper", themePreferences.paper);
-  root.style.setProperty("--surface-2", mixHex(themePreferences.paper, "#ffffff", 0.04));
+  root.style.setProperty("--surface-2", themePreferences.baseTheme === "light" ? "#F4F4F6" : "#1A1A1C");
   root.style.setProperty("--sidebar-bg", themePreferences.sidebar);
   root.style.setProperty("--sidebar-rgb", sidebarRgb);
-  root.style.setProperty("--theme-deep-1", mixHex(themePreferences.sidebar, themePreferences.accent, 0.2));
-  root.style.setProperty("--theme-deep-2", mixHex(themePreferences.sidebar, "#000000", 0.12));
-  root.dataset.theme = themePreferences.baseTheme || systemData?.profile?.baseTheme || "charcoal";
-  window.AetherCore?.applyDocumentTheme?.({ ...(systemData?.profile || {}), accent: themePreferences.accent, baseTheme: root.dataset.theme });
+  root.style.setProperty("--theme-deep-1", themePreferences.baseTheme === "light" ? "#FFFFFF" : "#0E0E10");
+  root.style.setProperty("--theme-deep-2", themePreferences.baseTheme === "light" ? "#ECECEF" : "#050506");
+  const base = themePreferences.baseTheme === "light" ? "light" : "charcoal";
+  root.dataset.theme = base;
+  if (systemData?.profile) {
+    systemData.profile.baseTheme = base;
+    systemData.profile.accent = accent;
+  }
+  window.AetherCore?.applyDocumentTheme?.({ ...(systemData?.profile || {}), accent, baseTheme: base });
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themePreferences.sidebar);
 }
 
@@ -1182,9 +1083,6 @@ function applyTabPreferences() {
 function renderSettings() {
   $("#tabSettingList").innerHTML = Object.entries(tabLabels).map(([id, label]) => `<label class="tab-setting-row"><span><strong>${label}</strong><small>${id === "academic" ? "Classes and course workspaces" : `Show ${label.toLowerCase()} in navigation`}</small></span><input type="checkbox" data-tab-toggle="${id}" ${tabPreferences[id] !== false ? "checked" : ""}><i aria-hidden="true"></i></label>`).join("");
   $("#themePresets").innerHTML = Object.entries(themePresets).map(([id, theme]) => `<button class="theme-preset ${themePreferences.name === theme.name ? "active" : ""}" data-theme-preset="${id}" type="button"><span><i style="background:${theme.sidebar}"></i><i style="background:${theme.accent}"></i><i style="background:${theme.paper}"></i></span><strong>${theme.name}</strong></button>`).join("");
-  $("#themeAccent").value = themePreferences.accent;
-  $("#themePaper").value = themePreferences.paper;
-  $("#themeSidebar").value = themePreferences.sidebar;
   renderConnections();
 
   $$('[data-tab-toggle]').forEach(input => input.addEventListener("change", () => {
@@ -1202,14 +1100,6 @@ function renderSettings() {
     renderSettings();
     showToast("Theme updated.");
   }));
-}
-
-function updateCustomTheme() {
-  themePreferences = { name: "Custom", accent: $("#themeAccent").value, paper: $("#themePaper").value, sidebar: $("#themeSidebar").value };
-  writeScoped("theme", themePreferences);
-  scheduleCloudSave();
-  applyTheme();
-  $$('[data-theme-preset]').forEach(button => button.classList.remove("active"));
 }
 
 function renderHero() {
@@ -1393,13 +1283,12 @@ function switchView(view) {
     calendar: ["Aether", "Calendar"],
     mail: ["Aether", "Mail"],
     health: ["Aether", "Health"],
-    capital: ["Aether", "Capital"],
     settings: ["Aether", "Settings"]
   };
   const [root, detail] = breadcrumbs[view];
   $("#breadcrumbRoot").textContent = root;
   $("#breadcrumbCourse").textContent = detail;
-  const primaryLabels = { home: "Quick capture", tasks: "Add task", networking: "Add contact", calendar: "Add event", health: "Connect health", capital: "Add transaction" };
+  const primaryLabels = { home: "Quick capture", tasks: "Add task", networking: "Add contact", calendar: "Add event", health: "Connect health" };
   $("#openCapture").innerHTML = `<span aria-hidden="true">+</span> ${primaryLabels[view] || "New note"}`;
   $(".topbar-actions").classList.toggle("home-hidden", view === "home" || view === "mail");
   renderCourseNav();
@@ -1407,9 +1296,8 @@ function switchView(view) {
   if (view === "academic") renderAcademicDashboard();
   if (view === "tasks") window.AetherModules?.renderTasksDashboard?.();
   if (view === "settings") renderSettings();
-  if (view === "capital") { renderSystemView(view); }
-  else renderSystemView(view);
-  history.replaceState(null, "", ["academic", "tasks", "networking", "calendar", "mail", "health", "capital", "settings"].includes(view) ? `#${view}` : location.pathname);
+  renderSystemView(view);
+  history.replaceState(null, "", ["academic", "tasks", "networking", "calendar", "mail", "health", "settings"].includes(view) ? `#${view}` : location.pathname);
   closeSidebar();
 }
 
@@ -1419,7 +1307,6 @@ function renderConnections() {
     { name: "Google Mail & Calendar", short: "G", color: "#4f72a6", description: "Inbox triage and bidirectional Google Calendar.", id: "google" },
     { name: "Strava", short: "S", color: "#fc4c02", description: "Training activities and load via OAuth popup.", id: "strava" },
     { name: "Fitbit", short: "F", color: "#00b0b9", description: "Sleep, HR, and daily summaries.", id: "fitbit" },
-    { name: "Plaid", short: "P", color: "#111", description: "Bank balances and transactions.", id: "plaid" },
     { name: "LinkedIn", short: "in", color: "#0a66c2", description: "Partner API pending — use CSV or email review queue.", id: "linkedin" },
     { name: "Apple Health", short: "AH", color: "#e54", description: "iOS bridge coming; not available in browser.", id: "apple" }
   ];
@@ -1445,7 +1332,7 @@ function setupCapture() {
   $("#noteCourseInput").innerHTML = courses.map(course => `<option value="${course.id}">${escapeHtml(course.code)} · ${escapeHtml(course.name)}</option>`).join("");
   $("#noteCourseInput").addEventListener("change", updateCaptureSources);
   $("#openCapture").addEventListener("click", () => {
-    if (["tasks", "networking", "calendar", "mail", "health", "capital"].includes(state.view)) {
+    if (["tasks", "networking", "calendar", "mail", "health"].includes(state.view)) {
       openSystemPrimary(state.view);
       return;
     }
@@ -1494,7 +1381,6 @@ function searchableItems(query = "") {
   systemData.events.forEach(event => items.push({ type: "Event", icon: "▦", title: event.title, subtitle: `${niceSystemDate(event.date)} · ${event.start}`, systemView: "calendar", recordId: event.id }));
   systemData.mail.messages.forEach(message => items.push({ type: "Mail", icon: "✉", title: message.subject, subtitle: `${senderName(message.sender)} · ${message.category || classifyMail(message)}`, systemView: "mail", recordId: message.id }));
   systemData.health.forEach(record => items.push({ type: "Health", icon: "H", title: record.workout, subtitle: `Recovery ${record.recovery} · ${niceSystemDate(record.date)}`, systemView: "health", recordId: record.id }));
-  systemData.transactions.forEach(record => items.push({ type: "Capital", icon: "$", title: record.name, subtitle: `${systemMoney(record.amount)} · ${record.category}`, systemView: "capital", recordId: record.id }));
   if (!normalized) return items.slice(0, 8);
   return items.filter(item => `${item.title} ${item.subtitle} ${item.type}`.toLowerCase().includes(normalized)).slice(0, 14);
 }
@@ -1526,7 +1412,6 @@ function openSearchItem(index) {
     switchView(item.systemView);
     if (item.systemView === "calendar") eventRecordForm(item.recordId);
     if (item.systemView === "health") healthRecordForm(item.recordId);
-    if (item.systemView === "capital") transactionRecordForm(item.recordId);
     return;
   }
   selectCourse(item.courseId, item.sourceId || null);
@@ -1608,7 +1493,6 @@ function setupEvents() {
   $("#editCourse").addEventListener("click", () => courseForm(state.courseId));
   $("#backToAcademic").addEventListener("click", () => switchView("academic"));
   $("#addSource").addEventListener("click", () => sourceForm());
-  ["themeAccent", "themePaper", "themeSidebar"].forEach(id => $("#" + id).addEventListener("input", updateCustomTheme));
   $("#resetTheme").addEventListener("click", () => {
     themePreferences = { ...themePresets.charcoal };
     writeScoped("theme", themePreferences);
@@ -1636,12 +1520,10 @@ function init() {
   renderAcademicDashboard();
   renderConnections();
   renderHome();
-  setInterval(() => {
-    if (state.view === "home") updateHomeClock();
-  }, 1000);
+  setInterval(() => updateHomeClock(), 1000);
   const requestedView = location.hash.slice(1);
   refreshMailSuggestions();
-  switchView(["academic", "tasks", "networking", "calendar", "mail", "health", "capital", "settings"].includes(requestedView) ? requestedView : "home");
+  switchView(["academic", "tasks", "networking", "calendar", "mail", "health", "settings"].includes(requestedView) ? requestedView : "home");
   $("#demoBannerLogin")?.addEventListener("click", () => {
     localStorage.removeItem("aetherGuestMode");
     if (typeof showAetherLogin === "function") showAetherLogin();

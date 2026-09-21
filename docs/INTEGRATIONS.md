@@ -91,7 +91,10 @@ if (snapshot.recovery < athlete.thresholds.lowRecovery) {
 }
 ```
 
-## Capital provider boundary
+## (Removed) Capital provider boundary
+
+Capital module removed from the product surface.
+
 
 - The working UI supports manual records and CSV export. Production can accept CSV import or a bank-data aggregator through the same adapter contract.
 - Store access tokens server-side, never in browser storage.
@@ -106,7 +109,7 @@ The prototype registers three page-scoped WebMCP tools when supported:
 - `brain_add_contact(name, org, role?, notes?)`
 - `brain_add_task(title, course, due, time?, priority?, notes?)`
 
-Production MCP server tools should include `search_records`, `create_record`, `update_record`, `delete_record`, `list_calendar_range`, `propose_schedule_adjustment`, and `sync_provider`. Destructive operations require explicit confirmation and audit entries. Health and capital tools return the minimum fields necessary for the request.
+Production MCP server tools should include `search_records`, `create_record`, `update_record`, `delete_record`, `list_calendar_range`, `propose_schedule_adjustment`, and `sync_provider`. Destructive operations require explicit confirmation and audit entries. Health tools return the minimum fields necessary for the request.
 
 ## Security and operations
 
