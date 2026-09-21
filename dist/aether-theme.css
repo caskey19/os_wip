@@ -1033,16 +1033,29 @@ h1, h2, h3, .brand-name, .login-brand, #homeTitle, .page-heading h1, .widget-kpi
   .academic-overview { grid-template-columns: 1fr; }
   .home-week-grid { grid-template-columns: 1fr 1fr; }
   .month-cell { min-height: 78px; padding: 5px; }
-  .month-cell > span {
-    font-size: 0;
-    width: 7px;
-    height: 7px;
-    padding: 0;
-    border-radius: 50%;
-    border-left: 0;
-    background: var(--accent);
+  .month-cell > span,
+  .month-event {
+    display: block !important;
+    width: auto !important;
+    height: auto !important;
+    max-width: 100%;
+    padding: 2px 4px !important;
+    border-radius: 4px !important;
+    border-left: 2px solid var(--accent) !important;
+    background: rgba(255, 255, 255, 0.04) !important;
+    font-size: 0.62rem !important;
+    line-height: 1.2 !important;
+    color: var(--ink) !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .calendar-controls .segment {
+    flex: 1;
+    min-height: 40px;
   }
   .topbar-clock { display: none; }
+  .nav-item { min-height: 44px; }
 }
 
 

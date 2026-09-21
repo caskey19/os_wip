@@ -883,9 +883,20 @@ function renderCalendarDashboard() {
     if (file) window.AetherModules?.importAthleticSchedule?.(file);
   });
   root.querySelector("[data-calendar-sync]")?.addEventListener("click", () => syncGoogleWorkspace(false));
-  root.querySelectorAll("[data-calendar-view]").forEach(button => button.addEventListener("click", () => { systemCalendarView = button.dataset.calendarView; renderCalendarDashboard(); }));
-  root.querySelectorAll("[data-calendar-step]").forEach(button => button.addEventListener("click", () => { const date = new Date(`${systemCalendarDate}T12:00:00`), direction = Number(button.dataset.calendarStep); if (systemCalendarView === "month") date.setMonth(date.getMonth() + direction); else date.setDate(date.getDate() + direction * (systemCalendarView === "week" ? 7 : systemCalendarView === "3day" ? 3 : 1)); systemCalendarDate = date.toISOString().slice(0, 10); renderCalendarDashboard(); }));
-  root.querySelector("[data-calendar-today]").addEventListener("click", () => { systemCalendarDate = systemToday; renderCalendarDashboard(); });
+  root.querySelectorAll("[data-calendar-view]").forEach(button => button.addEventListener("click", event => {
+    event.preventDefault();
+    systemCalendarView = button.dataset.calendarView || "week";
+    renderCalendarDashboard();
+  }));
+  root.querySelectorAll("[data-calendar-step]").forEach(button => button.addEventListener("click", () => {
+    const date = new Date(`${systemCalendarDate}T12:00:00`);
+    const direction = Number(button.dataset.calendarStep);
+    if (systemCalendarView === "month") date.setMonth(date.getMonth() + direction);
+    else date.setDate(date.getDate() + direction * (systemCalendarView === "week" ? 7 : systemCalendarView === "3day" ? 3 : 1));
+    systemCalendarDate = date.toISOString().slice(0, 10);
+    renderCalendarDashboard();
+  }));
+  root.querySelector("[data-calendar-today]")?.addEventListener("click", () => { systemCalendarDate = systemToday; renderCalendarDashboard(); });
   root.querySelectorAll("[data-calendar-event]").forEach(button => button.addEventListener("click", event => { event.stopPropagation(); eventRecordForm(button.dataset.calendarEvent); }));
   root.querySelectorAll("[data-calendar-day]").forEach(button => button.addEventListener("click", () => eventRecordForm(null, button.dataset.calendarDay)));
   root.querySelectorAll("[data-approve-mail-proposal]").forEach(button => button.addEventListener("click", () => approveMailSuggestion(button.dataset.approveMailProposal)));
@@ -968,6 +979,7 @@ window.renderNetworkingDashboard = renderNetworkingDashboard;
 window.renderCalendarDashboard = renderCalendarDashboard;
 window.renderHome = renderHome;
 Object.defineProperty(window, "systemCalendarDate", { get() { return systemCalendarDate; }, set(v) { systemCalendarDate = v; } });
+Object.defineProperty(window, "systemCalendarView", { get() { return systemCalendarView; }, set(v) { systemCalendarView = v; } });
 window.renderSettings = renderSettings;
 window.switchView = switchView;
 window.eventRecordForm = eventRecordForm;
